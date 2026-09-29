@@ -1,0 +1,6 @@
+[Unit]
+Description=Upload spark.md snapshots to the Spark server
+
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/spark-collector -config %h/.config/spark/collector.env
