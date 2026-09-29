@@ -1,0 +1,35 @@
+{{define "content"}}
+{{with .Project}}
+<header class="band p-{{.Priority}} t-{{.Type}}">
+  <div class="band-inner">
+    <a class="back" href="/">All projects</a>
+    <span class="type-mark" aria-hidden="true"></span>
+    <span class="sr">Priority {{.Priority}}, {{.Type}}.</span>
+    <h1 class="band-name">{{.Name}}</h1>
+    <p class="band-desc">{{.Description}}</p>
+    <p class="band-meta">
+      Snapshot from <time datetime="{{.Updated.Format "2006-01-02T15:04:05Z07:00"}}">{{date .Updated}}</time>{{if .ShowMachine}}, on <span class="machine">{{.Machine}}</span>{{end}}
+    </p>
+  </div>
+</header>
+<main class="doc">
+  {{range .Sections}}
+  <section>
+    <h2>{{.Title}}</h2>
+    {{if .Items}}
+    <ul class="items">
+      {{range .Items}}
+      <li>
+        <p class="item-title">{{.Title}}</p>
+        {{if .Description}}<p class="item-desc">{{.Description}}</p>{{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <div class="prose">{{.Body}}</div>
+    {{end}}
+  </section>
+  {{end}}
+</main>
+{{end}}
+{{end}}

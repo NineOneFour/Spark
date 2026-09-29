@@ -1,0 +1,320 @@
+/* Colors live here so they are easy to change. */
+:root {
+  /* priority: card color */
+  --priority-1: #dc2626; /* red */
+  --priority-2: #f59e0b; /* amber, between red and green */
+  --priority-3: #16a34a; /* green */
+  --priority-4: #0d9488; /* teal, between green and blue */
+  --priority-5: #2563eb; /* blue */
+
+  /* project type: small accent */
+  --type-key-project:  #7c3aed; /* violet */
+  --type-side-project: #475569; /* slate */
+  --type-experiment:   #db2777; /* magenta */
+  --type-just-for-fun: #f5f0e6; /* ivory */
+
+  /* light theme base */
+  --bg: #eceff3;
+  --surface: #ffffff;
+  --text: #1c2029;
+  --muted: #555c69;
+  --rule: #d3d8e0;
+  --tint: 16%;   /* how much priority color goes into a card */
+  --band-tint: 22%;
+
+  --display: "Bricolage Grotesque", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, sans-serif;
+}
+
+/* Ivory disappears on a light background. */
+:root { --type-just-for-fun-shown: #b8a67e; }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171a21;
+    --surface: #20242d;
+    --text: #eceae6;
+    --muted: #a4a8b1;
+    --rule: #333844;
+    --tint: 30%;
+    --band-tint: 40%;
+    --type-side-project: #94a3b8; /* slate is too dark to see on dark cards */
+    --type-just-for-fun-shown: var(--type-just-for-fun);
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 1.0625rem/1.55 var(--body);
+}
+
+a { color: inherit; }
+
+:focus-visible {
+  outline: 3px solid var(--text);
+  outline-offset: 3px;
+}
+
+.sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Priority and type as custom properties, picked up by cards and bands. */
+.p-1 { --pc: var(--priority-1); }
+.p-2 { --pc: var(--priority-2); }
+.p-3 { --pc: var(--priority-3); }
+.p-4 { --pc: var(--priority-4); }
+.p-5 { --pc: var(--priority-5); }
+.t-key-project  { --tc: var(--type-key-project); }
+.t-side-project { --tc: var(--type-side-project); }
+.t-experiment   { --tc: var(--type-experiment); }
+.t-just-for-fun { --tc: var(--type-just-for-fun-shown); }
+
+.type-mark {
+  display: block;
+  width: 2rem;
+  height: 0.375rem;
+  border-radius: 1rem;
+  background: var(--tc);
+}
+
+.wordmark {
+  margin: 0;
+  font: 800 1.75rem/1 var(--display);
+  letter-spacing: -0.02em;
+}
+
+/* Landing page */
+
+.site,
+.shelf {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding-inline: 1rem;
+}
+
+.site { padding-block: 1.75rem 1.25rem; }
+
+.shelf { padding-bottom: 3rem; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 0.875rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grid li { display: flex; }
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 1.125rem 1.125rem 1rem;
+  border-radius: 0.875rem;
+  background: color-mix(in oklab, var(--pc) var(--tint), var(--surface));
+  border-left: 0.375rem solid var(--pc);
+  text-decoration: none;
+}
+
+.card:hover { background: color-mix(in oklab, var(--pc) calc(var(--tint) + 8%), var(--surface)); }
+
+.card .type-mark { margin-bottom: 0.25rem; }
+
+.card-name {
+  font: 700 1.5rem/1.15 var(--display);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.card-desc {
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.machine {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.empty {
+  max-width: 34rem;
+  padding: 3rem 0;
+  color: var(--muted);
+}
+
+.empty-lead {
+  margin: 0 0 0.5rem;
+  color: var(--text);
+  font: 700 1.5rem/1.2 var(--display);
+}
+
+/* Project page */
+
+.band {
+  background: color-mix(in oklab, var(--pc) var(--band-tint), var(--bg));
+  border-bottom: 0.375rem solid var(--pc);
+}
+
+.band-inner,
+.doc {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding-inline: 1rem;
+}
+
+.band-inner { padding-block: 1.25rem 2.25rem; }
+
+.back {
+  display: inline-block;
+  margin-bottom: 2rem;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  text-underline-offset: 0.2em;
+}
+
+.back:hover { color: var(--text); }
+
+.band-name {
+  margin: 0.75rem 0 0.75rem;
+  font: 800 clamp(2.25rem, 8vw, 3.75rem)/1 var(--display);
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.band-desc {
+  margin: 0;
+  max-width: 36em;
+  font-size: 1.1875rem;
+  line-height: 1.45;
+}
+
+.band-meta {
+  margin: 1.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.doc { padding-block: 1rem 4rem; }
+
+.doc section { margin-top: 2.5rem; }
+
+.doc h2 {
+  margin: 0 0 0.75rem;
+  font: 700 1.3125rem/1.2 var(--display);
+}
+
+.prose p { margin: 0 0 1em; max-width: 66ch; }
+
+.prose :last-child { margin-bottom: 0; }
+
+code {
+  padding: 0.1em 0.3em;
+  border-radius: 0.3em;
+  background: var(--surface);
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+}
+
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.items li {
+  padding: 0.875rem 0 0.875rem 1rem;
+  border-left: 2px solid var(--rule);
+}
+
+.items li + li { margin-top: 0.25rem; }
+
+.item-title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.item-desc {
+  margin: 0.25rem 0 0;
+  max-width: 66ch;
+  color: var(--muted);
+}
+
+/* Login */
+
+.login {
+  max-width: 22rem;
+  margin: 0 auto;
+  padding: 18vh 1rem 3rem;
+}
+
+.login .wordmark { margin-bottom: 1.75rem; font-size: 2.5rem; }
+
+.login form {
+  display: flex;
+  flex-direction: column;
+}
+
+.login label {
+  margin: 0 0 0.375rem;
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.login input {
+  margin-bottom: 1.125rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.625rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem; /* 16px keeps iOS from zooming in */
+}
+
+.login button {
+  margin-top: 0.5rem;
+  padding: 0.8125rem;
+  border: 0;
+  border-radius: 0.625rem;
+  background: var(--priority-5);
+  color: #fff;
+  font: 700 1rem var(--body);
+  cursor: pointer;
+}
+
+.error {
+  margin: 0 0 1.125rem;
+  padding: 0.75rem 0.875rem;
+  border-left: 0.25rem solid var(--priority-1);
+  border-radius: 0.375rem;
+  background: color-mix(in oklab, var(--priority-1) 18%, var(--surface));
+}

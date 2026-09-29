@@ -1,0 +1,30 @@
+{{define "content"}}
+<header class="site">
+  <h1 class="wordmark">Spark</h1>
+</header>
+<main class="shelf">
+  {{if .Projects}}
+  <ul class="grid">
+    {{range .Projects}}
+    <li>
+      <a class="card p-{{.Priority}} t-{{.Type}}" href="/p/{{.ID}}">
+        <span class="type-mark" aria-hidden="true"></span>
+        <span class="sr">Priority {{.Priority}}, {{.Type}}.</span>
+        <span class="card-name">{{.Name}}</span>
+        <span class="card-desc">{{.Description}}</span>
+        <span class="card-foot">
+          <time datetime="{{.Updated.Format "2006-01-02T15:04:05Z07:00"}}">{{date .Updated}}</time>
+          {{if .ShowMachine}}<span class="machine">{{.Machine}}</span>{{end}}
+        </span>
+      </a>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <div class="empty">
+    <p class="empty-lead">No projects yet.</p>
+    <p>Run the Spark skill in a project and the collector will bring its snapshot here.</p>
+  </div>
+  {{end}}
+</main>
+{{end}}

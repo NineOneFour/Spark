@@ -1,12 +1,14 @@
-// Command collector scans a root directory for spark.md files and uploads
-// each one to the Spark Samba share as <machine-id>__<folder>.md.
+// Command collector scans source directories for spark.md files and copies
+// each one to the Spark data directory as <machine-id>__<folder>.md, either
+// over SMB or into a local folder.
 //
 // It runs once and exits; schedule it with a systemd timer, cron, or similar.
-// Server files for this machine that were not seen in this run are deleted.
+// Files for this machine that were not seen in this run are deleted.
 package main
 
 import (
 	"bufio"
+	"errors"
 	"flag"
 	"fmt"
 	"io/fs"
@@ -16,8 +18,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/hirochachacha/go-smb2"
 )
 
 const sparkFile = "spark.md"
@@ -31,12 +31,17 @@ var skipDirs = map[string]bool{
 }
 
 type config struct {
-	MachineID   string
-	ScanRoot    string
+	MachineID string
+	ScanRoots []string
+
+	// SMB target, used when SMBHost is set.
 	SMBHost     string
 	SMBUser     string
 	SMBPassword string
 	SMBShare    string
+
+	// Local target, used otherwise.
+	TargetDir string
 }
 
 func main() {
@@ -44,44 +49,48 @@ func main() {
 	if dir, err := os.UserConfigDir(); err == nil {
 		defaultConfig = filepath.Join(dir, "spark", "collector.env")
 	}
-	configPath := flag.String("config", defaultConfig, "path to collector env file")
+	configPath := flag.String("config", defaultConfig, "path to collector env file (optional; environment variables override it)")
 	flag.Parse()
+	explicit := false
+	flag.Visit(func(f *flag.Flag) { explicit = explicit || f.Name == "config" })
 
-	cfg, err := loadConfig(*configPath)
+	cfg, err := loadConfig(*configPath, explicit)
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
 
-	projects, err := scan(cfg.ScanRoot)
-	if err != nil {
-		log.Fatalf("scan: %v", err)
-	}
-	log.Printf("found %d spark.md file(s) under %s", len(projects), cfg.ScanRoot)
+	projects := scan(cfg.ScanRoots)
+	log.Printf("found %d spark.md file(s) under %s", len(projects), strings.Join(cfg.ScanRoots, ", "))
 
-	share, closeShare, err := connect(cfg)
-	if err != nil {
-		log.Fatalf("smb: %v", err)
+	var dst target
+	if cfg.SMBHost != "" {
+		dst, err = connectSMB(cfg)
+	} else {
+		dst, err = openLocal(cfg.TargetDir)
 	}
-	defer closeShare()
+	if err != nil {
+		log.Fatalf("target: %v", err)
+	}
+	defer dst.Close()
 
 	failed := false
 	keep := map[string]bool{}
 	for _, p := range projects {
 		name := cfg.MachineID + "__" + p.folder + ".md"
 		keep[strings.ToLower(name)] = true
-		if err := upload(share, p.path, name); err != nil {
-			log.Printf("upload %s: %v", p.path, err)
+		if err := copyTo(dst, p.path, name); err != nil {
+			log.Printf("copy %s: %v", p.path, err)
 			failed = true
 			continue
 		}
-		log.Printf("uploaded %s -> %s", p.path, name)
+		log.Printf("copied %s -> %s", p.path, name)
 	}
 
 	// An empty scan more likely means a wrong or missing root than that every
 	// project is gone, so never wipe this machine's cards on an empty scan.
 	if len(projects) == 0 {
 		log.Printf("no spark.md files found; skipping deletion")
-	} else if err := prune(share, cfg.MachineID, keep); err != nil {
+	} else if err := prune(dst, cfg.MachineID, keep); err != nil {
 		log.Printf("prune: %v", err)
 		failed = true
 	}
@@ -91,11 +100,74 @@ func main() {
 	}
 }
 
-func loadConfig(path string) (config, error) {
+var configKeys = []string{"MACHINE_ID", "SCAN_ROOT", "TARGET_DIR", "SMB_HOST", "SMB_SHARE", "SMB_USER", "SMB_PASSWORD"}
+
+// loadConfig reads the env file if present, then lets environment variables
+// override it. A missing file is only an error when it was passed explicitly.
+func loadConfig(path string, explicit bool) (config, error) {
+	vals, err := readEnvFile(path)
+	if err != nil && (explicit || !errors.Is(err, fs.ErrNotExist)) {
+		return config{}, err
+	}
+	for _, k := range configKeys {
+		if v, ok := os.LookupEnv(k); ok {
+			vals[k] = v
+		}
+	}
+
+	cfg := config{
+		MachineID:   vals["MACHINE_ID"],
+		SMBHost:     vals["SMB_HOST"],
+		SMBUser:     vals["SMB_USER"],
+		SMBPassword: vals["SMB_PASSWORD"],
+		SMBShare:    vals["SMB_SHARE"],
+		TargetDir:   expandHome(vals["TARGET_DIR"]),
+	}
+	for _, root := range strings.Split(vals["SCAN_ROOT"], ",") {
+		if root = strings.TrimSpace(root); root != "" {
+			cfg.ScanRoots = append(cfg.ScanRoots, expandHome(root))
+		}
+	}
+	if len(cfg.ScanRoots) == 0 {
+		return config{}, errors.New("SCAN_ROOT is required")
+	}
+
+	if cfg.MachineID == "" {
+		cfg.MachineID = "local"
+	}
+	if strings.Contains(cfg.MachineID, "__") || strings.ContainsAny(cfg.MachineID, `/\`) {
+		return config{}, errors.New("MACHINE_ID must not contain __ or path separators")
+	}
+
+	if cfg.SMBHost != "" {
+		for k, v := range map[string]string{"SMB_SHARE": cfg.SMBShare, "SMB_USER": cfg.SMBUser, "SMB_PASSWORD": cfg.SMBPassword} {
+			if v == "" {
+				return config{}, fmt.Errorf("%s is required when SMB_HOST is set", k)
+			}
+		}
+		if _, _, err := net.SplitHostPort(cfg.SMBHost); err != nil {
+			cfg.SMBHost = net.JoinHostPort(cfg.SMBHost, "445")
+		}
+	} else if cfg.TargetDir == "" {
+		// Default to a projects folder next to the binary, where the web app
+		// looks by default too.
+		exe, err := os.Executable()
+		if err != nil {
+			return config{}, fmt.Errorf("TARGET_DIR is not set and the binary location is unknown: %w", err)
+		}
+		cfg.TargetDir = filepath.Join(filepath.Dir(exe), "projects")
+	}
+	return cfg, nil
+}
+
+func readEnvFile(path string) (map[string]string, error) {
 	vals := map[string]string{}
+	if path == "" {
+		return vals, fs.ErrNotExist
+	}
 	f, err := os.Open(path)
 	if err != nil {
-		return config{}, err
+		return vals, err
 	}
 	defer f.Close()
 
@@ -107,37 +179,11 @@ func loadConfig(path string) (config, error) {
 		}
 		k, v, ok := strings.Cut(line, "=")
 		if !ok {
-			return config{}, fmt.Errorf("%s: invalid line %q", path, line)
+			return vals, fmt.Errorf("%s: invalid line %q", path, line)
 		}
 		vals[strings.TrimSpace(k)] = strings.Trim(strings.TrimSpace(v), `"'`)
 	}
-	if err := sc.Err(); err != nil {
-		return config{}, err
-	}
-
-	cfg := config{
-		MachineID:   vals["MACHINE_ID"],
-		ScanRoot:    expandHome(vals["SCAN_ROOT"]),
-		SMBHost:     vals["SMB_HOST"],
-		SMBUser:     vals["SMB_USER"],
-		SMBPassword: vals["SMB_PASSWORD"],
-		SMBShare:    vals["SMB_SHARE"],
-	}
-	for k, v := range map[string]string{
-		"MACHINE_ID": cfg.MachineID, "SCAN_ROOT": cfg.ScanRoot, "SMB_HOST": cfg.SMBHost,
-		"SMB_USER": cfg.SMBUser, "SMB_PASSWORD": cfg.SMBPassword, "SMB_SHARE": cfg.SMBShare,
-	} {
-		if v == "" {
-			return config{}, fmt.Errorf("%s: %s is required", path, k)
-		}
-	}
-	if strings.Contains(cfg.MachineID, "__") || strings.ContainsAny(cfg.MachineID, `/\`) {
-		return config{}, fmt.Errorf("MACHINE_ID must not contain __ or path separators")
-	}
-	if _, _, err := net.SplitHostPort(cfg.SMBHost); err != nil {
-		cfg.SMBHost = net.JoinHostPort(cfg.SMBHost, "445")
-	}
-	return cfg, nil
+	return vals, sc.Err()
 }
 
 func expandHome(p string) string {
@@ -154,41 +200,37 @@ type project struct {
 	folder string // name of the folder containing it
 }
 
-// scan walks root and returns one project per folder containing spark.md.
-// It does not descend into a folder once it has found spark.md there.
-func scan(root string) ([]project, error) {
-	info, err := os.Stat(root)
-	if err != nil {
-		return nil, err
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("%s is not a directory", root)
-	}
-
+// scan walks each root and returns one project per folder containing
+// spark.md. It does not descend into a folder once it has found spark.md
+// there. A root that cannot be read is logged and skipped.
+func scan(roots []string) []project {
 	var found []project
-	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			log.Printf("scan %s: %v", path, err)
-			if d != nil && d.IsDir() {
+	for _, root := range roots {
+		if info, err := os.Stat(root); err != nil || !info.IsDir() {
+			log.Printf("scan %s: not a readable directory", root)
+			continue
+		}
+		filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				log.Printf("scan %s: %v", path, err)
+				if d != nil && d.IsDir() {
+					return fs.SkipDir
+				}
+				return nil
+			}
+			if !d.IsDir() {
+				return nil
+			}
+			if path != root && (strings.HasPrefix(d.Name(), ".") || skipDirs[d.Name()]) {
+				return fs.SkipDir
+			}
+			candidate := filepath.Join(path, sparkFile)
+			if fi, err := os.Stat(candidate); err == nil && fi.Mode().IsRegular() {
+				found = append(found, project{path: candidate, folder: filepath.Base(path)})
 				return fs.SkipDir
 			}
 			return nil
-		}
-		if !d.IsDir() {
-			return nil
-		}
-		if path != root && (strings.HasPrefix(d.Name(), ".") || skipDirs[d.Name()]) {
-			return fs.SkipDir
-		}
-		candidate := filepath.Join(path, sparkFile)
-		if fi, err := os.Stat(candidate); err == nil && fi.Mode().IsRegular() {
-			found = append(found, project{path: candidate, folder: filepath.Base(path)})
-			return fs.SkipDir
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
+		})
 	}
 
 	// SMB names are case-insensitive, so two folders that differ only by case
@@ -205,79 +247,37 @@ func scan(root string) ([]project, error) {
 		seen[key] = p.path
 		unique = append(unique, p)
 	}
-	return unique, nil
+	return unique
 }
 
-func connect(cfg config) (*smb2.Share, func(), error) {
-	conn, err := net.Dial("tcp", cfg.SMBHost)
-	if err != nil {
-		return nil, nil, err
-	}
-	d := &smb2.Dialer{Initiator: &smb2.NTLMInitiator{User: cfg.SMBUser, Password: cfg.SMBPassword}}
-	session, err := d.Dial(conn)
-	if err != nil {
-		conn.Close()
-		return nil, nil, err
-	}
-	share, err := session.Mount(cfg.SMBShare)
-	if err != nil {
-		session.Logoff()
-		conn.Close()
-		return nil, nil, err
-	}
-	return share, func() {
-		share.Umount()
-		session.Logoff()
-		conn.Close()
-	}, nil
-}
-
-// upload writes to a temp file and renames it into place so the web app never
-// reads a partial file. SMB rename will not overwrite, so the old file is
-// removed first; the file is briefly absent but never half-written.
-func upload(share *smb2.Share, localPath, name string) error {
+func copyTo(dst target, localPath, name string) error {
 	data, err := os.ReadFile(localPath)
 	if err != nil {
 		return err
 	}
-	tmp := "." + name + ".tmp"
-	if err := share.WriteFile(tmp, data, 0o644); err != nil {
-		return err
-	}
-	if err := share.Remove(name); err != nil && !os.IsNotExist(err) {
-		share.Remove(tmp)
-		return err
-	}
-	if err := share.Rename(tmp, name); err != nil {
-		share.Remove(tmp)
-		return err
-	}
-	return nil
+	return dst.Put(name, data)
 }
 
-// prune deletes this machine's files on the share that were not uploaded in
+// prune deletes this machine's files in the target that were not copied in
 // this run, along with any temp files left behind by an interrupted run.
-func prune(share *smb2.Share, machineID string, keep map[string]bool) error {
-	entries, err := share.ReadDir(".")
+func prune(dst target, machineID string, keep map[string]bool) error {
+	names, err := dst.List()
 	if err != nil {
 		return err
 	}
 	prefix := strings.ToLower(machineID + "__")
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		lower := strings.ToLower(e.Name())
+	for _, name := range names {
+		lower := strings.ToLower(name)
 		stale := strings.HasPrefix(lower, prefix) && strings.HasSuffix(lower, ".md") && !keep[lower]
 		leftover := strings.HasPrefix(lower, "."+prefix) && strings.HasSuffix(lower, ".tmp")
 		if !stale && !leftover {
 			continue
 		}
-		if err := share.Remove(e.Name()); err != nil {
-			log.Printf("delete %s: %v", e.Name(), err)
+		if err := dst.Remove(name); err != nil {
+			log.Printf("delete %s: %v", name, err)
 			continue
 		}
-		log.Printf("deleted %s", e.Name())
+		log.Printf("deleted %s", name)
 	}
 	return nil
 }

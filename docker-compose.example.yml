@@ -1,0 +1,17 @@
+# Example: copy to docker-compose.yml and change the paths and login.
+services:
+  spark:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"   # drop 127.0.0.1: to reach it from other machines
+    environment:
+      SPARK_USERNAME: terry      # remove both lines to turn login off
+      SPARK_PASSWORD: change-me
+      # SPARK_MERGE: spark,collaborator
+      # COLLECT_INTERVAL: 900    # seconds between collector runs
+    volumes:
+      - ./spark-data:/projects   # where snapshots are kept
+      # Source folders to scan. Mount each one under /sources, read-only.
+      - ~/Projects:/sources/Projects:ro
+      # - ~/work:/sources/work:ro
+    restart: unless-stopped
