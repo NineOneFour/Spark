@@ -1,0 +1,10 @@
+{
+  "setupMode": "code-repo",
+  "aiTools": [
+    "claude"
+  ],
+  "scaffold_id": "b99de0a8-a349-43db-a507-795b43a88a27",
+  "scaffold_name": "Spark",
+  "origin": null,
+  "upstream": null
+}
