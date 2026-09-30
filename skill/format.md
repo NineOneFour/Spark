@@ -81,7 +81,7 @@ Requirements:
 
 ### `priority`
 
-Required controlled value. Always set by asking the user, never inferred.
+Required controlled value. Always chosen by the user, never inferred: given in the invocation (`Spark, go 5`) or asked for.
 
 Supported values:
 

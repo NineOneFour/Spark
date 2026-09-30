@@ -13,6 +13,8 @@ triggers:
 edges:
   - target: context/stack.md
     condition: when specific technology versions or library details are needed
+  - target: patterns/deploy-central-server.md
+    condition: when deploying Spark to a dedicated server with Samba and systemd
   - target: context/architecture.md
     condition: when understanding how components connect during setup
   - target: patterns/add-config-setting.md
@@ -41,7 +43,7 @@ mex:
 
 # Setup
 
-Full user-facing guide: `INSTALL.md` (localhost, Docker, central server routes).
+Full user-facing guide: `INSTALL.md` (localhost, Docker, central server routes). Deploying to a dedicated server: `patterns/deploy-central-server.md`.
 
 <!-- mex:entity
 id: mx_01M3QT590YCF4HB15N75G17C7A

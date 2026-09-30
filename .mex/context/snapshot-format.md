@@ -48,4 +48,4 @@ The spec is `skill/format.md`; the skeleton is `skill/template.md`. The web app 
 
 ## Presentation Coupling
 - Cards get CSS classes `p-<priority>` and `t-<project_type>` (`web/templates/index.html`), defined in `web/static/style.css`. A new priority or type value needs matching CSS.
-- The skill asks the user for priority using names (Right now … Shelved) mapped to the stored values in `format.md`.
+- The skill asks the user for priority using names (Right now … Shelved) mapped to the stored values in `format.md`, unless the invocation gives one (`Spark, go 5`, `Spark, go archived`).

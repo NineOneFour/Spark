@@ -2,3 +2,4 @@ spark-data/
 docker-compose.yml
 projects/
 docs/
+secret/
