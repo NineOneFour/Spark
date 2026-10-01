@@ -14,7 +14,7 @@ SparkRoot/
   setup.sh       one-time host setup
   INSTALL.md     this file
   Skill/         the Spark skill
-  Config/        settings (scan roots, project types, priority colors)
+  Config/        settings, plus state.json (each project's priority and archive flag)
   Projects/      snapshots, named projectName__projectType.md
 ```
 
@@ -60,6 +60,32 @@ python3 ~/Documents/Spark/collector.py
 
 In any project, tell your coding agent `Spark, go`. The skill writes `spark.md`, the collector copies it into `Projects/`, and the card appears.
 
+The priority you give the skill is only the starting value. After the card first appears, change priority, or archive the project, on its page. Archived projects are hidden; unarchive them under **Settings → Archived**.
+
+## Sharing with a team
+
+A team runs one Spark in **remote** mode on a server, and each person's own Spark (**local** mode, the default) pushes to it. Each push is tagged with the person's username, so a shared project shows one card with a tab per person.
+
+On the server:
+
+```sh
+docker run -d --name spark-remote \
+  -p 127.0.0.1:8080:8080 \
+  --user "$(id -u):$(id -g)" \
+  -v /srv/spark:/spark \
+  -e SPARK_MODE=remote -e SPARK_USERNAME=admin -e SPARK_PASSWORD=... \
+  --restart unless-stopped \
+  spark
+```
+
+Put it behind HTTPS (for example Caddy). Then:
+
+1. **Admin:** under **Settings**, pick the project types the remote accepts (or accept all), and under **People** create an invite link for each person. Send the link yourself; it works once, for 7 days. **Remove** next to a person ends their login and API keys; the projects they pushed stay.
+2. **Each person:** open the link, set a password, then under **Account** create an API key for each machine. A key is shown once.
+3. **On each machine:** in the local Spark's **Settings → Remotes**, add the remote's URL and the key, then tick the project types to send there.
+
+From then on, local pushes a project within a minute of its content, priority or archive changing, and fetches priorities set on the remote every 15 minutes (the last change to reach the remote wins). Archiving locally archives on the remote too; archiving on the remote only hides it there. Only the file's owner or the admin can change its priority or archive it on the remote, and only the admin changes types and colors.
+
 ## Settings
 
 All settings are files in `SparkRoot/Config/`, edited on the settings page or by hand:
@@ -69,12 +95,18 @@ All settings are files in `SparkRoot/Config/`, edited on the settings page or by
 | `scan_roots.json` | Folders the collector scans, for example `["~/Projects"]` |
 | `project_types.json` | Allowed project types, each with a card color, for example `[{"name": "side-project", "color": "#64748b"}]` |
 | `priority_colors.json` | Card color for each priority 1–5, for example `{"1": "#dc2626", ...}` |
+| `state.json` | Each project's priority and archive flag, set on the project page. Seeded from the snapshot the first time it's seen |
+| `remotes.json` | Local only: remotes to push to, with their API keys |
+| `accounts.json` | Login accounts (bcrypt passwords, hashed API keys), and on remote, pending invites |
+| `remote.json` | Remote only: `{"accept_all_types": true}` to accept every project type |
+| `session_key.json` | Signs login cookies. Delete it to sign everyone out |
 
 The web app creates any missing file with its defaults on start. A snapshot whose `project_type` isn't listed is hidden.
 
 | Container setting | Default | |
 |---|---|---|
-| `SPARK_USERNAME`, `SPARK_PASSWORD` | unset | Set both (`-e SPARK_USERNAME=me -e SPARK_PASSWORD=...`) to require login. Leave both unset for no login |
+| `SPARK_MODE` | `local` | `remote` for a team server (see [Sharing with a team](#sharing-with-a-team)) |
+| `SPARK_USERNAME`, `SPARK_PASSWORD` | unset | Set both (`-e SPARK_USERNAME=me -e SPARK_PASSWORD=...`) to require login. Leave both unset for no login. Required on remote, where this is the admin; the username uses lowercase letters, digits and hyphens |
 | `SPARK_ADDR` | `:8080` | Listen address inside the container |
 | `SPARK_ROOT` | `/spark` | SparkRoot inside the container |
 

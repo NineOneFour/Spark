@@ -30,14 +30,14 @@ The spec is `skill/format.md`; the skeleton is `skill/template.md`. The web app 
 ## Filename (collector → web)
 - The collector writes `Projects/<camel(project)>__<camel(project_type)>.md`. `camel_case` joins the letter/digit runs (`Spark / Web App` → `sparkWebApp`, `side-project` → `sideProject`).
 - Same target name twice in one run (case-insensitive): the first path (sorted) is copied, the rest are skipped with a warning.
-- The web app does not parse the filename; the filename without `.md` is only the project `ID` used in `/p/{id}`. Name and type come from front matter.
+- The filename without `.md` is the `ID` (the `state.json` key). `mode.fileKey` splits it into owner and card `Key`: on local the key is the whole id; on remote it is `username__` + the local id. Name and type come from front matter.
 - Dot-files and non-`.md` files are ignored, so `.<name>.tmp` temp files are never parsed.
 
 ## Front Matter (validated in `parseFile`)
 - Must start with `---\n` and close with `\n---\n` (CRLF is normalized first).
 - `project` and `description`: required, non-empty.
 - `last_updated`: must parse as `time.RFC3339` (offset required).
-- `priority`: one of `1`–`5` or `archived` (`validPriority`). `archived` files are dropped from the dashboard.
+- `priority`: one of `1`–`5` or `archived` (`validPriority`). Only a starting value: `seedState` copies it into `Config/state.json` the first time the file is seen (`archived` → archived, priority 5); later snapshots' values are ignored.
 - `project_type`: a `name` listed in `SparkRoot/Config/project_types.json` (reread per request in `loadProjects`). Defaults: `key-project`, `side-project`, `experiment`, `just-for-fun`. Names match `typeNameRe` (lowercase, hyphen-joined).
 - An invalid file is skipped and logged once per distinct error (`reportInvalid`), not on every request.
 

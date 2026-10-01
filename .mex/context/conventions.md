@@ -43,7 +43,7 @@ status: promoted
 revision: 1
 -->
 ## Naming
-- Go files: short lowercase nouns per concern (`main.go`, `auth.go`, `projects.go`, `settings.go`, `settings_page.go`); the module is `package main`.
+- Go files: short lowercase nouns per concern (`main.go`, `auth.go`, `projects.go`, `state.go`, `settings.go`, `settings_page.go`, `api.go`); mode-only files are prefixed `local`/`remote` (`local_sync.go`, `remote_api.go`). The module is `package main`.
 - Python: one script, `collector/collector.py`, snake_case functions, module docstring explaining the why.
 - Env vars: web only, `SPARK_` prefix (`SPARK_ROOT`, `SPARK_ADDR`, …). The collector has none.
 - SparkRoot subfolders are Title case (`Projects/`, `Skill/`, `Config/`); settings files are snake_case JSON (`scan_roots.json`).
@@ -102,8 +102,10 @@ Before presenting any code:
 - [ ] `go vet ./...` and `gofmt -l .` are clean in `web/`; `python3 -m py_compile collector/collector.py` passes
 - [ ] If the `spark.md` contract changed: `skill/format.md`, `skill/template.md`, `web/projects.go`, and `collector/collector.py` (filename fields) all agree
 - [ ] New env settings are in `configKeys`, `web/web.env.example`, the `INSTALL.md` table, and (if relevant) `Dockerfile` `ENV`
-- [ ] The web app writes only `Config/*.json` (through `writeJSON`); the collector writes only `Projects/` (through `put`); nothing deletes snapshots
+- [ ] The web app writes only `Config/*.json` (through `writeJSON`), plus pushed snapshots on remote (`writeFileAtomic`); the collector writes only `Projects/` (through `put`); nothing deletes snapshots
+- [ ] Mode-specific behavior goes through the `mode` interface, not a mode check in shared code
+- [ ] `go test ./...` passes in `web/`
 - [ ] Untrusted snapshot text still goes through goldmark or `html/template` escaping; no `template.HTML` built from raw input; anything written into `/colors.css` matches `typeNameRe`/`colorRe`
-- [ ] New routes are wrapped in `s.auth.require(...)` unless deliberately public (login, static, colors.css); POST routes go through `updateSettings` (CSRF check)
+- [ ] New routes are wrapped in `s.auth.require(...)` unless deliberately public (login, static, colors.css, `/invite/{token}`); API routes use `requireKey`; form POSTs call `checkPost` (CSRF), settings ones through `updateSettings`
 - [ ] Anything that runs on the host stays inside SparkRoot except `setup.sh`'s symlink and cron line
 - [ ] American English in code, comments, and docs

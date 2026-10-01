@@ -1,14 +1,18 @@
 {{define "content"}}
 <header class="site">
   <h1 class="wordmark">Spark</h1>
-  <a class="nav" href="/settings">Settings</a>
+  <nav class="nav-links">
+    {{if .Remote}}<a class="nav" href="/account">Account</a>{{end}}
+    <a class="nav" href="/settings">Settings</a>
+    {{if .Viewer}}<form method="post" action="/logout" class="nav-form"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="nav">Log out</button></form>{{end}}
+  </nav>
 </header>
 <main class="shelf">
-  {{if .Projects}}
+  {{if .Cards}}
   <ul class="grid">
-    {{range .Projects}}
+    {{range .Cards}}
     <li>
-      <a class="card p-{{.Priority}} t-{{.Type}}" href="/p/{{.ID}}">
+      <a class="card p-{{.Priority}} t-{{.Type}}" href="/p/{{.Key}}">
         <span class="type-mark" aria-hidden="true"></span>
         <span class="sr">Priority {{.Priority}}, {{.Type}}.</span>
         <span class="card-name">{{.Name}}</span>

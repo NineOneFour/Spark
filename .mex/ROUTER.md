@@ -28,16 +28,19 @@ Then read this file fully before doing anything else in this session.
 ## Current Project State
 
 **Working:**
-- Phase 2 is built (2026-10-01): one Docker image owns SparkRoot (`Projects/`, `Skill/`, `Config/`) and fills it on every start
+- Phase 3 is built (2026-10-01, `phase3-plan.md`): `SPARK_MODE=local|remote`. Local pushes snapshots to remotes by project type (60s hash poll, plus at once on priority/archive changes) and pulls priorities every 15 minutes. Remote: invite-only accounts, per-machine API keys, one card per `project__type` with a tab per user
+- Priority and archive live in `Config/state.json`; the project page edits them, Settings → Archived unarchives
+- Phase 2 (2026-10-01): one Docker image owns SparkRoot (`Projects/`, `Skill/`, `Config/`) and fills it on every start
 - Skill (`skill/SKILL.md`) generates `spark.md` per `skill/format.md`; allowed types come from `Config/project_types.json`
 - Collector: `collector.py` in SparkRoot, run by cron on the host; copies to `Projects/projectName__projectType.md`, never deletes
-- Web app: card grid, per-project page, settings page (scan roots, project types, type and priority colors), optional login
+- Web app: card grid, per-project page, settings page (scan roots, remotes, project types, colors, archived), login (optional on local, required on remote)
 - `setup.sh` (host): skill symlink and cron line. `INSTALL.md` documents the Docker route plus a short no-Docker route
 
 **Not yet built:**
-- Phase 3: remote server connections (push/pull between SparkRoots); first question still open, see `phase2-plan.md` "Phase 3"
+- Phase 3 later hardening: memory/time limits when parsing pushed files (ids and size are already checked)
+- Phase 4: the richer "Spark handoff"
 - Publishing the image to Docker Hub: a later phase, not soon. Until then, build it locally (`docker build -t spark .`); docs use the name `spark`
-- Automated tests and CI
+- Tests beyond `web/render_test.go`, and CI
 - Code-graph coverage: `.mex/graph.db` indexed 0 files at setup (Go), so the scaffold has no `grounds_to` entries
 
 **Known issues:**

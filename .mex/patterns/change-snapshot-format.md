@@ -49,7 +49,7 @@ Project types and their colors are deployment data in `SparkRoot/Config/project_
 - Stricter validation hides every existing snapshot that lacks the new field, because invalid files are skipped (logged once only). Prefer optional fields or regenerate all snapshots.
 - The collector's front-matter reader is a flat `key: value` parser (stdlib only), not YAML. Nested or multi-line values won't parse there.
 - `listSections` matches the heading text exactly, case included.
-- `archived` is filtered out in `loadProjects`; any new "hidden" value needs the same treatment.
+- `archived` only seeds `state.json` (`seedState`); `buildCards` hides archived files by their state, not their front matter.
 - Section headings must be top-level `# `; `## ` lines are treated as body text.
 
 ## Verify

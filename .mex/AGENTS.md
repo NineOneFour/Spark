@@ -7,21 +7,23 @@ last_updated: 2026-10-01
 # Spark
 
 ## What This Is
-A project-memory dashboard: an agent skill writes `spark.md` snapshots, a Python collector on the host copies them into one folder (SparkRoot), and a Go web app in a Docker container renders them as cards and manages settings.
+A project-memory dashboard: an agent skill writes `spark.md` snapshots, a Python collector on the host copies them into one folder (SparkRoot), and a Go web app in a Docker container renders them as cards and manages settings. The same image runs as `local` (one person) or `remote` (a team server that locals push to).
 
 ## Non-Negotiables
 - `skill/format.md` is the single contract for `spark.md`; change it, `skill/template.md`, and `web/projects.go` validation together
-- No database, no API: Markdown files in `SparkRoot/Projects/` and JSON in `SparkRoot/Config/` are the only source of truth
+- No database: Markdown files in `SparkRoot/Projects/` and JSON in `SparkRoot/Config/` are the only source of truth. The only API is the sync API, served in remote mode (`web/api.go`)
 - The container never touches host folders outside SparkRoot; host-only steps belong in `setup.sh`
-- The web app writes only `Config/*.json`; it never writes, renames, or deletes snapshots
+- The web app writes only `Config/*.json` (including `state.json`); on local it never writes, renames, or deletes snapshots. On remote, a push writes `Projects/username__project__type.md`
+- Priority and archive live in `Config/state.json`; a snapshot's `priority` only seeds it
+- Mode-only code lives in `web/local*.go` / `web/remote*.go` behind the `mode` interface in `main.go`; the shared core never checks the mode
 - Nothing deletes snapshots automatically; all writes stay atomic (temp file + rename)
 - Snapshot filenames are `projectName__projectType.md` from front matter; no machine ID anywhere
-- Snapshot content is untrusted: keep goldmark's default HTML escaping and the CSP header
+- Snapshot content is untrusted: keep goldmark's default HTML escaping, bluemonday on every render, and the CSP header
 
 ## Commands
-One Go module (`web/`, Go 1.23+) and one Python script (`collector/collector.py`, stdlib), no test suite yet:
+One Go module (`web/`, Go 1.23+) and one Python script (`collector/collector.py`, stdlib); one Go test file (`web/render_test.go`):
 - Build web: `(cd web && go build -o web .)`
-- Check: `go vet ./...` and `gofmt -l .` in `web/`; `python3 -m py_compile collector/collector.py`
+- Check: `go vet ./...`, `gofmt -l .` and `go test ./...` in `web/`; `python3 -m py_compile collector/collector.py`
 - No local Go? Run them in `golang:1.23` with `docker run --rm -u $(id -u):$(id -g) -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/gopath -v "$PWD/web":/src -w /src golang:1.23 ...`
 - Run locally: `SPARK_ROOT=<scratch> ./web/web`, copy `collector/collector.py` into that SparkRoot, run it
 - Docker: `docker build -t spark .` then `docker run --user "$(id -u):$(id -g)" -v <SparkRoot>:/spark -p 127.0.0.1:8080:8080 spark`

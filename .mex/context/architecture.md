@@ -83,10 +83,14 @@ revision: 1
 - **entrypoint** (`docker/entrypoint.sh`): refuses to start if `/spark` isn't writable, warns when run as root, overwrites the shipped files in SparkRoot (copy + rename), then `exec web`.
 - **setup.sh** (repo root, shipped into SparkRoot): host-only steps, idempotent. Symlinks the skill (leaves a real folder alone), adds the cron line (`> collector.log`).
 - **web server** (`web/main.go`): `net/http` mux with Go 1.22 patterns (`GET /{$}`, `GET /p/{id}`, `GET /settings`, `POST /settings/*`, `/login`, public `GET /colors.css`), embedded templates/static, `securityHeaders` (CSP, nosniff).
-- **settings** (`web/settings.go`): `ensureSettings` creates `Projects/`, `Config/` and missing default files on start; loaders validate entries (`typeNameRe`, `colorRe`) and log bad ones once; `writeJSON` writes temp + rename.
+- **settings** (`web/settings.go`): `ensureSettings` creates `Projects/`, `Config/` and missing default files on start (`scan_roots.json` only on local, in `newLocalMode`); loaders validate entries (`typeNameRe`, `colorRe`) and log bad ones once; `writeJSON` writes temp + rename.
 - **settings page** (`web/settings_page.go`): scan roots, project types, priority colors. `updateSettings` checks the post (`checkPost`: `Sec-Fetch-Site`/`Origin` + per-process CSRF token), serializes writes under `settingsMu`, and edits the file as written so invalid hand entries survive.
-- **project loader** (`web/projects.go`): `loadProjects` → `parseFile` → `splitFrontMatter` + YAML + `parseSections`; drops invalid and `archived` files and types not in `project_types.json`. The filename without `.md` is only the URL id.
-- **auth** (`web/auth.go`): optional single-user login; stateless HMAC cookie `spark_session` keyed by username+password; `require` is a no-op when `auth` is nil.
+- **mode boundary** (`web/main.go`): `mode` interface (`routes`, `fileKey`, `acceptsType`, `canEdit`, `canEditSettings`, `settingsData`, `stateChanged`), implemented by `localMode` (`local.go`) and `remoteMode` (`remote.go`). Shared routes: `/`, `/p/{key}`, `POST /p/{key}/state`, `/settings`, types, colors, login.
+- **project loader** (`web/projects.go`): `s.loadProjects` → `mode.fileKey` → `parseSnapshot` (`splitFrontMatter` + YAML + `parseSections`) → `applyState`. Returns archived files too; `buildCards` drops them and groups by `Key` (`project__type`). Viewer with a file on the card sees its priority; others see the most urgent. Rendering is goldmark then bluemonday (`newSanitizer`).
+- **state** (`web/state.go`): `Config/state.json`, map of file id → `priority`, `priority_set`, `archived` (+ `sync` per remote on local). `seedState` from front matter on first sight (`archived` → archived at 5). `changeState` handles the project page form and Settings → Archived.
+- **auth** (`web/auth.go`): one login system for both modes. `Config/accounts.json` (bcrypt passwords, SHA-256 API key and invite hashes), gorilla/sessions cookie `spark_session` signed with `Config/session_key.json`, session tied to a password tag. Env account is seeded/updated as admin on start. `POST /logout` (CSRF-checked) clears the cookie. `require` is a no-op when `auth` is nil (local without login) and puts the account in the request context (`viewer`).
+- **local sync** (`web/local_sync.go`): `syncLoop` pushes every 60s, on `kick`, and after each 15-minute pull. A file is pushed to each remote in `Config/remotes.json` whose `types` include it, when its hash, priority or archive flag differs from its `syncRecord`; priority/archived are sent only when changed locally. A file archived before its first push is never sent. Pull adopts a remote priority whose stamp is newer, unless a local change is still unpushed.
+- **remote** (`web/remote*.go`): files `username__project__type.md` (`remoteFileRe`). API behind `requireKey` (`GET /api/types`, `PUT /api/files/{id}`, `GET /api/priorities`; contract in `api.go`); push checks the id (`localFileRe`), size (`maxPush`) and the snapshot against format.md, then writes it and stamps priority with the remote clock. Admin: accepted types (`Config/remote.json`), invites (one-time link, 7 days), removing accounts (`changeAccounts`: login, keys and sessions go, pushed files stay; the env admin can't be removed). `/account`: per-machine API keys shown once. `/invite/{token}`: set password, log in.
 
 <!-- mex:entity
 id: mx_01M3QT58X08DZWHQFZMHB8FT1E
@@ -108,10 +112,10 @@ status: promoted
 revision: 1
 -->
 ## What Does NOT Exist Here
-- No database, no JSON API. The web app writes only `Config/*.json`, never snapshots.
+- No database. The only JSON API is the remote's sync API. The web app writes only `Config/*.json`, plus pushed snapshots on remote.
 - No automatic deletion anywhere; old snapshots are removed by hand.
-- No machine ID, no SMB, no central-server route (removed in phase 2); remote servers are phase 3.
+- No machine ID, no SMB. Remotes are the same image in remote mode, not a separate server.
 - No task tracking or history: each `spark.md` is a disposable present-tense snapshot.
-- No multi-user accounts or roles: at most one username/password pair.
+- No roles beyond admin vs. user, no email, no external identity provider, no self sign-up.
 - No Git integration: snapshots never contain commit data, and `last_updated` is never derived from Git.
-- No automated tests or CI yet.
+- No CI; one test file (`web/render_test.go`, sanitizer and code blocks).

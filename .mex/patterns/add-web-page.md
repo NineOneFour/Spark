@@ -36,15 +36,15 @@ mex:
 ## Steps
 1. Create `web/templates/<page>.html` defining `{{define "content"}}…{{end}}`; set `Title` in the data map for `base.html`.
 2. Add `"<page>"` to the page list in `main()` so it gets parsed.
-3. Write a `func (s *server) <page>(w, r)` handler; load data via `loadProjects(s.cfg.Root)` if needed, then `s.render(w, "<page>", data)`.
-4. Register it: `mux.HandleFunc("GET /<path>", s.auth.require(s.<page>))`.
+3. Write a `func (s *server) <page>(w, r)` handler; load data via `s.loadProjects()` if needed, then `s.render(w, r, "<page>", data)` (it adds `Viewer` and `Remote`). A page for one mode only is a method on `localMode` or `remoteMode`, registered in that mode's `routes`.
+4. Register it: `mux.HandleFunc("GET /<path>", s.auth.require(s.<page>))` in `main()` (shared) or the mode's `routes`.
 5. Add styles to `web/static/style.css`; rebuild (assets are embedded).
 
 ## Gotchas
 - A template missing from the page list panics at startup (`template.Must`) or renders nothing (a nil map entry).
 - CSP is `default-src 'self'`: no inline `<script>` or `style=""`, and no third-party hosts except Google Fonts. Update `securityHeaders` deliberately if needed.
 - Use `GET /{$}`-style exact patterns; `GET /` alone matches everything.
-- GET handlers are read-only. A POST that changes settings goes through `s.updateSettings(change)` (CSRF + `Sec-Fetch-Site`/`Origin` check, write lock, error re-render), and its form needs the hidden `csrf` field. Never write to `Projects/`.
+- GET handlers are read-only. A POST that changes settings goes through `s.updateSettings(change)` (CSRF + `Sec-Fetch-Site`/`Origin` check, write lock, error re-render), and its form needs the hidden `csrf` field. Never write to `Projects/` (only the remote push API does).
 - Never wrap user-controlled strings in `template.HTML`; only goldmark output is trusted.
 
 ## Verify

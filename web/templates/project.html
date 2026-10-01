@@ -8,10 +8,30 @@
     <h1 class="band-name">{{.Name}}</h1>
     <p class="band-desc">{{.Description}}</p>
     <p class="band-meta">
-      Snapshot from <time datetime="{{.Updated.Format "2006-01-02T15:04:05Z07:00"}}">{{date .Updated}}</time>
+      Snapshot from <time datetime="{{.Updated.Format "2006-01-02T15:04:05Z07:00"}}">{{date .Updated}}</time>{{if .Owner}} by {{.Owner}}{{end}}
     </p>
+    {{if $.CanEdit}}
+    <form method="post" action="/p/{{.Key}}/state" class="state">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      <input type="hidden" name="file" value="{{.ID}}">
+      <label for="priority">Priority</label>
+      <select id="priority" name="priority">
+        {{$current := .Priority}}
+        {{range $.Priorities}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}} · {{priorityName .}}</option>{{end}}
+      </select>
+      <button name="action" value="priority">Save</button>
+      <button name="action" value="archive" class="quiet">Archive</button>
+    </form>
+    {{end}}
   </div>
 </header>
+{{if $.Tabs}}
+<nav class="tabs" aria-label="Whose file">
+  {{range $.Card.Files}}
+  <a href="/p/{{.Key}}?u={{.Owner}}" class="tab p-{{.Priority}}"{{if eq .ID $.Project.ID}} aria-current="page"{{end}}>{{.Owner}}</a>
+  {{end}}
+</nav>
+{{end}}
 <main class="doc">
   {{range .Sections}}
   <section>

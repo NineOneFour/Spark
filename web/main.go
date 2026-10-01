@@ -1,6 +1,9 @@
 // Command web serves the Spark dashboard: a card per project snapshot, and a
-// readable page for each one. It reads snapshots from SparkRoot/Projects and
-// writes only the settings files in SparkRoot/Config.
+// readable page for each one. It runs in one of two modes. Local reads the
+// snapshots the collector copies into SparkRoot/Projects and pushes them to
+// remotes; remote receives pushes from many users and shows them together.
+// Everything here is shared by both modes; mode-only code is in local*.go and
+// remote*.go, behind the mode interface.
 package main
 
 import (
@@ -31,17 +34,43 @@ var staticFS embed.FS
 type config struct {
 	Root     string // SparkRoot
 	Addr     string
+	Mode     string // "local" or "remote"
 	Username string
 	Password string
 }
 
 type server struct {
 	cfg  config
+	mode mode
 	auth *auth
 	tmpl map[string]*template.Template
 	csrf string
 
 	settingsMu sync.Mutex // serializes read-modify-write of settings files
+	stateMu    sync.Mutex // serializes read-modify-write of state.json
+}
+
+// mode is the boundary between the shared core and the mode-only code. The
+// core never asks which mode it is in; it asks the mode.
+type mode interface {
+	// routes registers the mode's own pages and endpoints.
+	routes(mux *http.ServeMux)
+	// fileKey splits a snapshot's id (its filename without .md) into its
+	// owner and its card key (project__type). ok is false for a name the
+	// mode doesn't store.
+	fileKey(id string) (owner, key string, ok bool)
+	// acceptsType reports whether snapshots of this type are shown.
+	acceptsType(name string, listed map[string]bool) bool
+	// canEdit reports whether the viewer may change a file's priority or
+	// archive it. v is nil when login is off.
+	canEdit(v *account, p *Project) bool
+	// canEditSettings reports whether the viewer may change the shared
+	// settings (project types and colors).
+	canEditSettings(v *account) bool
+	// settingsData adds the mode's own sections to the settings page.
+	settingsData(r *http.Request, v *account, data map[string]any)
+	// stateChanged is called after a priority or archive change.
+	stateChanged()
 }
 
 func main() {
@@ -54,10 +83,11 @@ func main() {
 	}
 
 	funcs := template.FuncMap{
-		"date": func(t time.Time) string { return t.Format("Jan 2, 2006") },
+		"date":         func(t time.Time) string { return t.Format("Jan 2, 2006") },
+		"priorityName": func(p string) string { return priorityNames[p] },
 	}
 	tmpl := map[string]*template.Template{}
-	for _, page := range []string{"index", "project", "login", "settings"} {
+	for _, page := range []string{"index", "project", "login", "settings", "account", "invite"} {
 		tmpl[page] = template.Must(template.New("").Funcs(funcs).ParseFS(templateFS, "templates/base.html", "templates/"+page+".html"))
 	}
 
@@ -67,9 +97,16 @@ func main() {
 
 	s := &server{cfg: cfg, tmpl: tmpl, csrf: newCSRFToken()}
 	if cfg.Username != "" {
-		s.auth = newAuth(cfg.Username, cfg.Password)
+		if s.auth, err = newAuth(cfg.Root, cfg.Username, cfg.Password); err != nil {
+			log.Fatalf("login: %v", err)
+		}
 	} else {
 		log.Printf("no SPARK_USERNAME/SPARK_PASSWORD set: login is off, anyone who can reach %s can read it", cfg.Addr)
+	}
+	if cfg.Mode == "remote" {
+		s.mode = newRemoteMode(s)
+	} else if s.mode, err = newLocalMode(s); err != nil {
+		log.Fatalf("settings: %v", err)
 	}
 
 	static, _ := fs.Sub(staticFS, "static")
@@ -79,18 +116,24 @@ func main() {
 	mux.HandleFunc("GET /colors.css", s.colors)
 	mux.HandleFunc("GET /login", s.loginPage)
 	mux.HandleFunc("POST /login", s.login)
+	mux.HandleFunc("POST /logout", s.logout)
 	mux.HandleFunc("GET /{$}", s.auth.require(s.index))
-	mux.HandleFunc("GET /p/{id}", s.auth.require(s.project))
+	mux.HandleFunc("GET /p/{key}", s.auth.require(s.project))
+	mux.HandleFunc("POST /p/{key}/state", s.auth.require(s.changeState))
 	mux.HandleFunc("GET /settings", s.auth.require(s.settings))
-	mux.HandleFunc("POST /settings/scan-roots", s.auth.require(s.updateSettings(s.changeScanRoots)))
 	mux.HandleFunc("POST /settings/types", s.auth.require(s.updateSettings(s.changeProjectTypes)))
 	mux.HandleFunc("POST /settings/priorities", s.auth.require(s.updateSettings(s.changePriorityColors)))
+	s.mode.routes(mux)
 
-	log.Printf("listening on %s, SparkRoot is %s", cfg.Addr, cfg.Root)
+	log.Printf("listening on %s in %s mode, SparkRoot is %s", cfg.Addr, cfg.Mode, cfg.Root)
 	log.Fatal(http.ListenAndServe(cfg.Addr, securityHeaders(mux)))
 }
 
-func (s *server) render(w http.ResponseWriter, page string, data any) {
+// render adds what every page needs (the viewer, for the header) to data.
+func (s *server) render(w http.ResponseWriter, r *http.Request, page string, data map[string]any) {
+	data["Viewer"] = viewer(r)
+	data["Remote"] = s.cfg.Mode == "remote"
+	data["CSRF"] = s.csrf // also used by the log out button in the header
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := s.tmpl[page].ExecuteTemplate(w, "base", data); err != nil {
 		log.Printf("render %s: %v", page, err)
@@ -98,30 +141,58 @@ func (s *server) render(w http.ResponseWriter, page string, data any) {
 }
 
 func (s *server) index(w http.ResponseWriter, r *http.Request) {
-	projects, err := loadProjects(s.cfg.Root)
+	projects, err := s.loadProjects()
 	if err != nil {
 		log.Printf("load projects: %v", err)
 		http.Error(w, "Could not read the project directory. Check the server log.", http.StatusInternalServerError)
 		return
 	}
-	s.render(w, "index", map[string]any{"Title": "Spark", "Projects": projects})
+	s.render(w, r, "index", map[string]any{"Title": "Spark", "Cards": buildCards(projects, viewer(r))})
 }
 
+// project shows one card's files: one tab per owner, the viewer's own file
+// first selected, or the owner named by ?u=.
 func (s *server) project(w http.ResponseWriter, r *http.Request) {
-	projects, err := loadProjects(s.cfg.Root)
+	projects, err := s.loadProjects()
 	if err != nil {
 		log.Printf("load projects: %v", err)
 		http.Error(w, "Could not read the project directory. Check the server log.", http.StatusInternalServerError)
 		return
 	}
-	id := r.PathValue("id")
-	for _, p := range projects {
-		if p.ID == id {
-			s.render(w, "project", map[string]any{"Title": p.Name, "Project": p})
-			return
+	var card *Card
+	for _, c := range buildCards(projects, viewer(r)) {
+		if c.Key == r.PathValue("key") {
+			card = c
 		}
 	}
-	http.NotFound(w, r)
+	if card == nil {
+		http.NotFound(w, r)
+		return
+	}
+	selected := card.Files[0]
+	if v := viewer(r); v != nil {
+		for _, f := range card.Files {
+			if f.Owner == v.Username {
+				selected = f
+			}
+		}
+	}
+	if u := r.URL.Query().Get("u"); u != "" {
+		for _, f := range card.Files {
+			if f.Owner == u {
+				selected = f
+			}
+		}
+	}
+	s.render(w, r, "project", map[string]any{
+		"Title":      selected.Name,
+		"Card":       card,
+		"Project":    selected,
+		"Tabs":       selected.Owner != "",
+		"CanEdit":    s.mode.canEdit(viewer(r), selected),
+		"CSRF":       s.csrf,
+		"Priorities": []string{"1", "2", "3", "4", "5"},
+	})
 }
 
 // colors serves the per-deployment type and priority colors as custom
@@ -150,33 +221,6 @@ func (s *server) colors(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, b.String())
 }
 
-func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
-	if s.auth == nil || s.auth.valid(r) {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-	s.render(w, "login", map[string]any{"Title": "Log in to Spark"})
-}
-
-func (s *server) login(w http.ResponseWriter, r *http.Request) {
-	if s.auth == nil {
-		http.Redirect(w, r, "/", http.StatusSeeOther)
-		return
-	}
-	username, password := r.PostFormValue("username"), r.PostFormValue("password")
-	if !s.auth.checkCredentials(username, password) {
-		w.WriteHeader(http.StatusUnauthorized)
-		s.render(w, "login", map[string]any{
-			"Title":    "Log in to Spark",
-			"Error":    "Wrong username or password.",
-			"Username": username,
-		})
-		return
-	}
-	s.auth.setSession(w, r)
-	http.Redirect(w, r, "/", http.StatusSeeOther)
-}
-
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
@@ -187,10 +231,10 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-var configKeys = []string{"SPARK_ROOT", "SPARK_ADDR", "SPARK_USERNAME", "SPARK_PASSWORD"}
+var configKeys = []string{"SPARK_ROOT", "SPARK_ADDR", "SPARK_MODE", "SPARK_USERNAME", "SPARK_PASSWORD"}
 
 // loadConfig reads the env file if one is given, then lets environment
-// variables override it. Every setting is optional.
+// variables override it. Every setting is optional in local mode.
 func loadConfig(path string) (config, error) {
 	vals := map[string]string{}
 	if path != "" {
@@ -208,6 +252,7 @@ func loadConfig(path string) (config, error) {
 	cfg := config{
 		Root:     vals["SPARK_ROOT"],
 		Addr:     vals["SPARK_ADDR"],
+		Mode:     vals["SPARK_MODE"],
 		Username: vals["SPARK_USERNAME"],
 		Password: vals["SPARK_PASSWORD"],
 	}
@@ -225,6 +270,21 @@ func loadConfig(path string) (config, error) {
 	}
 	if (cfg.Username == "") != (cfg.Password == "") {
 		return config{}, errors.New("set both SPARK_USERNAME and SPARK_PASSWORD, or neither")
+	}
+	switch cfg.Mode {
+	case "", "local":
+		cfg.Mode = "local"
+	case "remote":
+		// The first admin's username tags their pushes, so it goes into
+		// filenames and is held to the same shape as every other username.
+		if cfg.Username == "" {
+			return config{}, errors.New("remote mode needs SPARK_USERNAME and SPARK_PASSWORD for the first admin")
+		}
+		if !usernameRe.MatchString(cfg.Username) {
+			return config{}, fmt.Errorf("SPARK_USERNAME %q: %s", cfg.Username, usernameRule)
+		}
+	default:
+		return config{}, fmt.Errorf("SPARK_MODE %q: use local or remote", cfg.Mode)
 	}
 	return cfg, nil
 }

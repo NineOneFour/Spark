@@ -91,9 +91,11 @@ Supported values:
 | `3`        | When I can    | Will pick up when there's room                                   |
 | `4`        | Eventually    | Not soon, but still intended                                     |
 | `5`        | Someday maybe | Whenever, if ever                                                |
-| `archived` | Shelved       | No work for the foreseeable future; hidden from the landing page |
+| `archived` | Shelved       | No work for the foreseeable future; starts archived (hidden)     |
 
 The file stores the value. The name is only used when the skill asks the user; the web application shows priority as color.
+
+The value is only the starting priority. The first time the web application sees a file, it copies the priority into `Config/state.json`; from then on priority and archiving are changed in the web application, and a new snapshot's value is ignored. (The collector rewrites every snapshot on each run, so state kept in the file would be lost.) `archived` starts the project archived, at priority 5.
 
 `archived` also covers finished projects.
 

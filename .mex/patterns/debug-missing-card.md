@@ -42,7 +42,7 @@ There are three boundaries, each with its own log: the collector on the host (`S
 3. **Collector run:** is cron running it (`crontab -l`, or rerun `setup.sh`)? Run `python3 SparkRoot/collector.py` by hand. Look for `copied <path> -> <name>`, `skipping <path>: <reason>` (bad front matter), and `... is already taken by ...` (two projects with the same camelCased name and type; the first path wins).
 4. **SparkRoot:** confirm `Projects/projectName__projectType.md` exists and the container mounts that same folder at `/spark`.
 5. **Web parse:** look for `skipping <file>: <reason>` in the web log, most often `unsupported project_type` (the type is not in `project_types.json`). It is logged once per distinct error, so restart the container to see it again.
-6. **Filtering:** `priority: archived` hides the card.
+6. **Filtering:** an archived file is hidden: check `archived` in `Config/state.json` (or Settings → Archived). A snapshot that starts as `priority: archived` is archived the first time it's seen. On remote, the card shows only when at least one person's file on it isn't archived.
 
 ## Gotchas
 - Stale card that won't go away: nothing is ever deleted automatically. Renaming a project or changing its type writes a new file and leaves the old one; delete it from `Projects/` by hand.

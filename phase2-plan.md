@@ -126,9 +126,9 @@ Built: `AGENTS.md` non-negotiables and commands, `ROUTER.md` state, all `context
 - Update or retire `patterns/deploy-central-server.md` and `patterns/debug-missing-card.md`.
 - `patterns/add-web-page.md`: "handlers are GET-only and read-only" no longer holds; document `updateSettings` and `checkPost` for POST routes.
 
-## Phase 3 (not planned yet)
+## Phase 3
 
-- Remote server connections: add and remove on the settings page, store API keys in SparkRoot (decision 7), never echo a stored key back into the page. First question: push this SparkRoot's snapshots up, pull a team's down, or both, and over what protocol?
+Designed in `phase3-plan.md`.
 
 ## Effects to keep in mind
 

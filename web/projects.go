@@ -13,11 +13,23 @@ import (
 	"sync"
 	"time"
 
+	"github.com/microcosm-cc/bluemonday"
 	"github.com/yuin/goldmark"
 	"gopkg.in/yaml.v3"
 )
 
+// validPriority lists the priorities a snapshot may start with. From then on
+// the priority lives in state.json, where "archived" is a separate flag.
 var validPriority = map[string]bool{"1": true, "2": true, "3": true, "4": true, "5": true, "archived": true}
+
+// priorityNames are the names format.md gives each priority.
+var priorityNames = map[string]string{
+	"1": "Right now",
+	"2": "Up next",
+	"3": "When I can",
+	"4": "Eventually",
+	"5": "Someday maybe",
+}
 
 // listSections hold "- Title" / "\t- description" items instead of prose.
 var listSections = map[string]bool{
@@ -27,13 +39,18 @@ var listSections = map[string]bool{
 }
 
 type Project struct {
-	ID          string // filename without .md, used in the URL
+	ID          string // filename without .md: the state.json key
+	Key         string // project__type: the card this file belongs to
+	Owner       string // username on remote; empty on local
 	Name        string
 	Description string
 	Updated     time.Time
-	Priority    string
+	Priority    string // 1-5, from state.json
+	Archived    bool   // from state.json
 	Type        string
 	Sections    []Section
+
+	startPriority string // front matter value, used only to seed state.json
 }
 
 type Section struct {
@@ -55,20 +72,22 @@ type frontMatter struct {
 	ProjectType string `yaml:"project_type"`
 }
 
-// loadProjects reads every snapshot in SparkRoot/Projects, drops invalid and
-// archived ones, and returns the rest sorted by name. A project_type must be
-// listed in project_types.json. Invalid files are logged, not shown.
-func loadProjects(root string) ([]*Project, error) {
-	types, err := loadProjectTypes(root)
+// loadProjects reads every snapshot in SparkRoot/Projects, drops invalid
+// ones, applies state.json, and returns the rest (archived included) sorted
+// by name. The project_type must be one the mode accepts. Invalid files are
+// logged, not shown.
+func (s *server) loadProjects() ([]*Project, error) {
+	types, err := loadProjectTypes(s.cfg.Root)
 	if err != nil {
 		return nil, err
 	}
-	validType := map[string]bool{}
+	listed := map[string]bool{}
 	for _, t := range types {
-		validType[t.Name] = true
+		listed[t.Name] = true
 	}
+	validType := func(name string) bool { return s.mode.acceptsType(name, listed) }
 
-	dir := filepath.Join(root, "Projects")
+	dir := filepath.Join(s.cfg.Root, "Projects")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
@@ -80,15 +99,27 @@ func loadProjects(root string) ([]*Project, error) {
 		if e.IsDir() || strings.HasPrefix(name, ".") || !strings.HasSuffix(name, ".md") {
 			continue
 		}
-		p, err := parseFile(filepath.Join(dir, name), validType)
+		id := strings.TrimSuffix(name, ".md")
+		owner, key, ok := s.mode.fileKey(id)
+		if !ok {
+			reportInvalid(name, errors.New("filename does not match this mode's naming scheme"))
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			reportInvalid(name, err)
+			continue
+		}
+		p, err := parseSnapshot(raw, validType)
 		reportInvalid(name, err)
 		if err != nil {
 			continue
 		}
-		if p.Priority == "archived" {
-			continue
-		}
+		p.ID, p.Owner, p.Key = id, owner, key
 		projects = append(projects, p)
+	}
+	if err := s.applyState(projects); err != nil {
+		return nil, err
 	}
 
 	sort.Slice(projects, func(i, j int) bool {
@@ -99,6 +130,62 @@ func loadProjects(root string) ([]*Project, error) {
 		return projects[i].ID < projects[j].ID
 	})
 	return projects, nil
+}
+
+// Card is one project__type on the landing page. On remote it can hold one
+// file per user; on local it always holds exactly one.
+type Card struct {
+	Key         string
+	Name        string
+	Description string
+	Updated     time.Time
+	Priority    string
+	Type        string
+	Files       []*Project // not archived, sorted by owner
+}
+
+// buildCards groups the files that aren't archived into cards. A viewer with
+// a file on the card sees that file's priority and text; everyone else sees
+// the most urgent priority and the newest file's text.
+func buildCards(projects []*Project, v *account) []*Card {
+	byKey := map[string]*Card{}
+	var cards []*Card
+	for _, p := range projects {
+		if p.Archived {
+			continue
+		}
+		c := byKey[p.Key]
+		if c == nil {
+			c = &Card{Key: p.Key, Type: p.Type}
+			byKey[p.Key] = c
+			cards = append(cards, c)
+		}
+		c.Files = append(c.Files, p)
+	}
+	for _, c := range cards {
+		sort.Slice(c.Files, func(i, j int) bool { return c.Files[i].Owner < c.Files[j].Owner })
+		shown := c.Files[0]
+		c.Priority = shown.Priority
+		for _, f := range c.Files {
+			if f.Updated.After(shown.Updated) {
+				shown = f
+			}
+			if f.Priority < c.Priority { // "1" is the most urgent
+				c.Priority = f.Priority
+			}
+		}
+		for _, f := range c.Files {
+			if v != nil && f.Owner != "" && f.Owner == v.Username {
+				shown = f
+				c.Priority = f.Priority
+			}
+		}
+		c.Name, c.Description, c.Updated = shown.Name, shown.Description, shown.Updated
+	}
+	sort.SliceStable(cards, func(i, j int) bool {
+		return strings.ToLower(cards[i].Name) < strings.ToLower(cards[j].Name)
+	})
+	return cards
 }
 
 var (
@@ -121,11 +208,9 @@ func reportInvalid(name string, err error) {
 	}
 }
 
-func parseFile(path string, validType map[string]bool) (*Project, error) {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
+// parseSnapshot checks a snapshot against format.md. The caller sets ID,
+// Owner and Key from the filename.
+func parseSnapshot(raw []byte, validType func(string) bool) (*Project, error) {
 	fm, body, err := splitFrontMatter(raw)
 	if err != nil {
 		return nil, err
@@ -145,19 +230,17 @@ func parseFile(path string, validType map[string]bool) (*Project, error) {
 	if !validPriority[meta.Priority] {
 		return nil, fmt.Errorf("unsupported priority %q", meta.Priority)
 	}
-	if !validType[meta.ProjectType] {
+	if !validType(meta.ProjectType) {
 		return nil, fmt.Errorf("unsupported project_type %q", meta.ProjectType)
 	}
 
-	sections := parseSections(body)
 	return &Project{
-		ID:          strings.TrimSuffix(filepath.Base(path), ".md"),
-		Name:        meta.Project,
-		Description: meta.Description,
-		Updated:     updated,
-		Priority:    meta.Priority,
-		Type:        meta.ProjectType,
-		Sections:    sections,
+		Name:          meta.Project,
+		Description:   meta.Description,
+		Updated:       updated,
+		Type:          meta.ProjectType,
+		Sections:      parseSections(body),
+		startPriority: meta.Priority,
 	}, nil
 }
 
@@ -233,15 +316,33 @@ func parseItems(lines []string) []Item {
 	return items
 }
 
-// goldmark escapes raw HTML by default, so snapshot content cannot inject markup.
-var md = goldmark.New()
+// goldmark escapes raw HTML by default, so snapshot content cannot inject
+// markup. Snapshots pushed to a remote come from other people, so its output
+// also goes through bluemonday on every render, in case a goldmark bug or a
+// future extension lets something through.
+var (
+	md        = goldmark.New()
+	sanitizer = newSanitizer()
+)
+
+// newSanitizer starts from bluemonday's policy for user content and narrows
+// it: links only to web and mail addresses, and never passing the referrer
+// on. Remote images are already blocked by the CSP (img-src falls back to
+// 'self').
+func newSanitizer() *bluemonday.Policy {
+	p := bluemonday.UGCPolicy()
+	p.AllowURLSchemes("http", "https", "mailto")
+	p.RequireNoReferrerOnLinks(true)
+	p.RequireNoFollowOnLinks(true)
+	return p
+}
 
 func renderMarkdown(text string) template.HTML {
 	var buf bytes.Buffer
 	if err := md.Convert([]byte(text), &buf); err != nil {
 		return template.HTML(template.HTMLEscapeString(text))
 	}
-	return template.HTML(buf.String())
+	return template.HTML(sanitizer.SanitizeBytes(buf.Bytes()))
 }
 
 // renderInline renders one line of Markdown without the wrapping <p>.

@@ -28,12 +28,54 @@ last_updated: 2026-10-01
 
 ## Decision Log
 
+<!-- Phase 3 decisions (2026-10-01). Built 2026-10-01; full list in phase3-plan.md. -->
+
+### Phase 3: open items answered
+**Date:** 2026-10-01
+**Status:** Active
+**Decision:** State is one `Config/state.json` keyed by file id. Last write wins by the remote's clock (stamped on arrival); a pull never overwrites an unpushed local change. Local finds content changes by polling every 60s and comparing hashes. The skill can still start a file archived (seeds archived at priority 5). Local login stays optional; the env account seeds the first account. Passwords are bcrypt; API keys are one per local deployment, shown once, stored as SHA-256 (amends "one account = one API key"); invites likewise, 7-day expiry. Unarchive from Settings → Archived.
+**Reasoning:** The user picked each from options: remote clock avoids clock skew; polling works on Docker Desktop bind mounts; per-machine keys let a lost machine be revoked alone and mean no plaintext keys on the remote.
+**Alternatives considered:** Config vs. State/ folder vs. sidecar files; each side's own clock; fsnotify; web-only archiving; always-on local login; argon2id; one viewable key per user; skill re-run unarchives; hand-editing state.json.
+**Consequences:** `accounts.json` holds a key list per account. An unarchive UI was needed because archived files are hidden everywhere else.
+
+### Phase 3: team sharing through remote deployments
+**Date:** 2026-10-01
+**Status:** Active (built 2026-10-01)
+**Decision:** One image with a `local`/`remote` mode flag; remote-only code behind one boundary. Local pushes to one or more remotes, choosing remotes by project type; each remote accepts a set list of types or all. Uploaded files are `username__project__type`. Content and archive go local → remote only; priority syncs both ways, last write wins. The local container pushes only when content, priority or archive changes, and asks each remote for priorities every 15 minutes. Front end renders goldmark output through bluemonday on every display.
+**Reasoning:** The user's phase 3 spec, reconciled with phase 2. The collector rewrites identical files every 15 minutes, so pushes must be change-based.
+**Alternatives considered:** Remote's type list replacing local's (blocks one local, many remotes); per-project remote selection; sync in the collector; priority only returned on push.
+**Consequences:** "No database, no API" becomes "no database; API only in remote mode". See phase3-plan.md "Phase 2 rules this changes".
+
+### Phase 3: priority and archive leave spark.md
+**Date:** 2026-10-01
+**Status:** Active (built 2026-10-01)
+**Decision:** Priority and archive live in a state file the web app owns. The skill's priority only sets the starting value; `archived` stops being a priority value. Archive is a per-side display flag.
+**Reasoning:** The collector rewrites each snapshot every run, so state inside the file would overwrite priorities set on remote.
+**Alternatives considered:** Keeping them in front matter and letting the web app edit the file.
+**Consequences:** `format.md`, `template.md` and `web/projects.go` change together. The web app writes the state file as well as `Config/*.json`.
+
+### Phase 3: one account per person on remote, invited by magic link
+**Date:** 2026-10-01
+**Status:** Active (built 2026-10-01)
+**Decision:** A remote account is one login, one API key and one tagging username. The first admin is set when the container starts; the admin creates accounts by a one-time link they copy and send themselves (no email). Only an admin or the file's owner changes a file's priority or archive state; only the admin edits colours. Local uses the same login system with account and invite features hidden, and routes split into remote-only and local-only.
+**Reasoning:** The user: self-contained, no external identity provider or SMTP; one login system rather than two.
+**Alternatives considered:** Self sign-up; emailed links; keeping local's single-user env login separate; anyone editing any file's priority.
+**Consequences:** `web/auth.go`'s stateless single-user cookie is replaced.
+
+### Phase 3: one card per project__type, priority colour per viewer
+**Date:** 2026-10-01
+**Status:** Active (built 2026-10-01)
+**Decision:** A card is one `project__type`, styled as on local (type accent, priority colour). On remote, tabs hold each user's file. A viewer with a file on the card sees their own priority colour; others see the most urgent.
+**Reasoning:** The user: same as local. Grouping by project alone would give local cards with two untagged files.
+**Alternatives considered:** One card per project name with tabs labelled by user and type.
+**Consequences:** None yet.
+
 <!-- Phase 2 decisions (2026-10-01). Built 2026-10-01 (phase2-plan.md steps 1-7).
      Older entries below that they supersede are kept for history. -->
 
 ### Phase 3: remote servers are deferred
 **Date:** 2026-10-01
-**Status:** Active
+**Status:** Superseded by "Phase 3: team sharing through remote deployments" (2026-10-01)
 **Decision:** Phase 2 stays local only. Remote server connections (and `remote_servers.json`, API keys on the settings page) move to phase 3. Their first open question: push this SparkRoot's snapshots up, pull a team's down, or both, and over what protocol.
 **Reasoning:** The user: stay local before adding that complexity.
 **Alternatives considered:** Designing the remote protocol during phase 2.

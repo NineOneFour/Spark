@@ -1,0 +1,19 @@
+{{define "content"}}
+<main class="login">
+  <h1 class="wordmark">Spark</h1>
+  {{with .Invite}}
+  <form method="post" action="">
+    <p>Set a password for <strong>{{.Username}}</strong>.</p>
+    {{if $.Error}}<p class="error" role="alert">{{$.Error}}</p>{{end}}
+    <input type="hidden" name="username" value="{{.Username}}" autocomplete="username">
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required autofocus>
+    <label for="confirm">Password again</label>
+    <input id="confirm" name="confirm" type="password" autocomplete="new-password" minlength="8" required>
+    <button type="submit">Join</button>
+  </form>
+  {{else}}
+  <p class="error" role="alert">{{if .Error}}{{.Error}}{{else}}This invite link isn't valid, or it has expired. Ask your admin for a new one.{{end}}</p>
+  {{end}}
+</main>
+{{end}}

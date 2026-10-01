@@ -14,7 +14,7 @@ import (
 )
 
 // Settings live as JSON files in SparkRoot/Config, one file per concern.
-// They are the only files the web app writes.
+// The web app writes only Config, plus pushed snapshots on remote.
 const (
 	scanRootsFile      = "scan_roots.json"
 	projectTypesFile   = "project_types.json"
@@ -58,11 +58,14 @@ func ensureSettings(root string) error {
 			return err
 		}
 	}
-	defaults := map[string]any{
-		scanRootsFile:      []string{},
+	return ensureFiles(root, map[string]any{
 		projectTypesFile:   defaultProjectTypes,
 		priorityColorsFile: defaultPriorityColors,
-	}
+	})
+}
+
+// ensureFiles writes each missing Config file with its default value.
+func ensureFiles(root string, defaults map[string]any) error {
 	for name, v := range defaults {
 		path := filepath.Join(configDir(root), name)
 		if _, err := os.Stat(path); err == nil {
@@ -148,12 +151,18 @@ func writeJSON(path string, v any) error {
 	if err != nil {
 		return err
 	}
+	return writeFileAtomic(path, append(data, '\n'))
+}
+
+// writeFileAtomic writes data to path through a temp file and a rename, so a
+// reader never sees half a file.
+func writeFileAtomic(path string, data []byte) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(tmp.Name()) // no-op after a successful rename
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		tmp.Close()
 		return err
 	}

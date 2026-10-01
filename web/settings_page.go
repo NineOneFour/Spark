@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"io/fs"
 	"log"
 	"net/http"
 	"net/url"
@@ -48,45 +47,75 @@ type priorityColor struct {
 }
 
 func (s *server) settings(w http.ResponseWriter, r *http.Request) {
-	s.renderSettings(w, http.StatusOK, "")
+	s.renderSettings(w, r, http.StatusOK, "", nil)
 }
 
-func (s *server) renderSettings(w http.ResponseWriter, status int, errMsg string) {
-	roots, err := readScanRoots(s.cfg.Root)
-	if err != nil {
-		log.Printf("load scan roots: %v", err)
+// renderSettings shows the settings page. extra carries one-time values to
+// show, such as a new invite link.
+func (s *server) renderSettings(w http.ResponseWriter, r *http.Request, status int, errMsg string, extra map[string]any) {
+	v := viewer(r)
+	data := map[string]any{
+		"Title": "Settings · Spark",
+		"Error": errMsg,
+		"CSRF":  s.csrf,
 	}
-	types, err := loadProjectTypes(s.cfg.Root)
-	if err != nil {
-		log.Printf("load project types: %v", err)
-	}
-	colors, err := loadPriorityColors(s.cfg.Root)
-	if err != nil {
-		log.Printf("load priority colors: %v", err)
-		colors = defaultPriorityColors
-	}
-	var priorities []priorityColor
-	for p := 1; p <= 5; p++ {
-		priorities = append(priorities, priorityColor{strconv.Itoa(p), colors[strconv.Itoa(p)]})
+	if s.mode.canEditSettings(v) {
+		types, err := loadProjectTypes(s.cfg.Root)
+		if err != nil {
+			log.Printf("load project types: %v", err)
+		}
+		colors, err := loadPriorityColors(s.cfg.Root)
+		if err != nil {
+			log.Printf("load priority colors: %v", err)
+			colors = defaultPriorityColors
+		}
+		var priorities []priorityColor
+		for p := 1; p <= 5; p++ {
+			priorities = append(priorities, priorityColor{strconv.Itoa(p), colors[strconv.Itoa(p)]})
+		}
+		data["Types"], data["Priorities"] = types, priorities
+		data["EditSettings"] = true
 	}
 
+	// Archived files are hidden everywhere else, so this is the only way
+	// back to them.
+	projects, err := s.loadProjects()
+	if err != nil {
+		log.Printf("load projects: %v", err)
+	}
+	var archived []*Project
+	for _, p := range projects {
+		if p.Archived && s.mode.canEdit(v, p) {
+			archived = append(archived, p)
+		}
+	}
+	data["Archived"] = archived
+
+	s.mode.settingsData(r, v, data)
+	for k, val := range extra {
+		data[k] = val
+	}
 	w.WriteHeader(status)
-	s.render(w, "settings", map[string]any{
-		"Title":      "Settings · Spark",
-		"Error":      errMsg,
-		"CSRF":       s.csrf,
-		"ScanRoots":  roots,
-		"Types":      types,
-		"Priorities": priorities,
-	})
+	s.render(w, r, "settings", data)
 }
 
-// updateSettings wraps a settings change: it checks the post, serializes
-// writes, and either redirects back to the page or shows the error there.
+// updateSettings wraps a settings change: it checks the post and the
+// viewer's right to change shared settings, serializes writes, and either
+// redirects back to the page or shows the error there.
 func (s *server) updateSettings(change func(r *http.Request) error) http.HandlerFunc {
+	return s.updateSettingsAs(func(r *http.Request) bool { return s.mode.canEditSettings(viewer(r)) }, change)
+}
+
+// updateSettingsAs is updateSettings with its own permission check, for
+// settings any viewer may change (such as their own API keys).
+func (s *server) updateSettingsAs(allowed func(r *http.Request) bool, change func(r *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.checkPost(r) {
 			http.Error(w, "This form has expired. Reload the settings page and try again.", http.StatusForbidden)
+			return
+		}
+		if !allowed(r) {
+			http.Error(w, "Only an admin can change this.", http.StatusForbidden)
 			return
 		}
 		s.settingsMu.Lock()
@@ -96,10 +125,10 @@ func (s *server) updateSettings(change func(r *http.Request) error) http.Handler
 		var userErr userError
 		switch {
 		case errors.As(err, &userErr):
-			s.renderSettings(w, http.StatusBadRequest, userErr.Error())
+			s.renderSettings(w, r, http.StatusBadRequest, userErr.Error(), nil)
 		case err != nil:
 			log.Printf("save settings: %v", err)
-			s.renderSettings(w, http.StatusInternalServerError, "Could not save the settings. Check the server log.")
+			s.renderSettings(w, r, http.StatusInternalServerError, "Could not save the settings. Check the server log.", nil)
 		default:
 			http.Redirect(w, r, "/settings", http.StatusSeeOther)
 		}
@@ -110,31 +139,6 @@ func (s *server) updateSettings(change func(r *http.Request) error) http.Handler
 type userError string
 
 func (e userError) Error() string { return string(e) }
-
-func (s *server) changeScanRoots(r *http.Request) error {
-	path := strings.TrimSpace(r.PostFormValue("path"))
-	roots, err := readScanRoots(s.cfg.Root)
-	if err != nil {
-		return err
-	}
-	switch r.PostFormValue("action") {
-	case "add":
-		// The collector reads these on the host, so the container can't check
-		// that they exist; it can only check that they are absolute.
-		if !strings.HasPrefix(path, "/") && path != "~" && !strings.HasPrefix(path, "~/") {
-			return userError("A scan root must start with / or ~/.")
-		}
-		if slices.Contains(roots, path) {
-			return userError(fmt.Sprintf("%s is already a scan root.", path))
-		}
-		roots = append(roots, path)
-	case "remove":
-		roots = slices.DeleteFunc(roots, func(p string) bool { return p == path })
-	default:
-		return userError("Unknown action.")
-	}
-	return writeJSON(filepath.Join(configDir(s.cfg.Root), scanRootsFile), roots)
-}
 
 func (s *server) changeProjectTypes(r *http.Request) error {
 	name := strings.TrimSpace(r.PostFormValue("name"))
@@ -189,15 +193,4 @@ func (s *server) changePriorityColors(r *http.Request) error {
 		colors[p] = c
 	}
 	return writeJSON(filepath.Join(configDir(s.cfg.Root), priorityColorsFile), colors)
-}
-
-// readScanRoots returns scan_roots.json as written. A missing file is an
-// empty list, so the page still works if someone deleted it.
-func readScanRoots(root string) ([]string, error) {
-	var roots []string
-	err := readJSON(filepath.Join(configDir(root), scanRootsFile), &roots)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
-	return roots, err
 }

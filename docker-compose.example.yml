@@ -7,6 +7,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"    # keep 127.0.0.1 unless login is on
     environment: {}
+      # SPARK_MODE: remote       # for a team server; needs the login below
       # SPARK_USERNAME: me       # set both to turn login on
       # SPARK_PASSWORD: change-me
     volumes:
