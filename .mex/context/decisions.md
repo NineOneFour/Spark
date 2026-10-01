@@ -28,8 +28,24 @@ last_updated: 2026-10-01
 
 ## Decision Log
 
-<!-- Phase 2 decisions (2026-10-01). Agreed in a design session; NOT YET BUILT.
-     The code still follows the older entries below until phase2-plan.md is done. -->
+<!-- Phase 2 decisions (2026-10-01). Built 2026-10-01 (phase2-plan.md steps 1-7).
+     Older entries below that they supersede are kept for history. -->
+
+### Phase 3: remote servers are deferred
+**Date:** 2026-10-01
+**Status:** Active
+**Decision:** Phase 2 stays local only. Remote server connections (and `remote_servers.json`, API keys on the settings page) move to phase 3. Their first open question: push this SparkRoot's snapshots up, pull a team's down, or both, and over what protocol.
+**Reasoning:** The user: stay local before adding that complexity.
+**Alternatives considered:** Designing the remote protocol during phase 2.
+**Consequences:** The "everything in SparkRoot, including API keys" decision has no keys to hold yet.
+
+### Phase 2: the image holds everything; setup.sh does the host steps
+**Date:** 2026-10-01
+**Status:** Active (built 2026-10-01)
+**Decision:** One image, run with `docker run` and SparkRoot mounted, carries the web app, the collector, the skill, `setup.sh` and `INSTALL.md`. On every start the entrypoint overwrites `collector.py`, `setup.sh`, `INSTALL.md` and `Skill/` in SparkRoot; `Config/` and `Projects/` are never overwritten. `setup.sh`, run once on the host from SparkRoot, creates the skill symlink and the cron line, because the container may not touch host folders outside SparkRoot. Login is `-e SPARK_USERNAME/SPARK_PASSWORD`.
+**Reasoning:** The user: someone runs the image and it holds everything needed, and it will be published to Docker Hub. Overwriting on start means pulling a new image updates the skill and collector.
+**Alternatives considered:** A setup script that also writes a compose file and starts the container; copying the shipped files only when missing (edits survive, but old skills linger after an upgrade).
+**Consequences:** Local edits to `Skill/` or `collector.py` are lost on restart; customization goes through `Config/`. The image name in docs is a placeholder until published.
 
 ### Phase 2: colors are per-deployment settings
 **Date:** 2026-10-01
@@ -49,7 +65,7 @@ last_updated: 2026-10-01
 
 ### Phase 2: the container is the core, SparkRoot is its one folder
 **Date:** 2026-10-01
-**Status:** Accepted, not yet built
+**Status:** Active (built 2026-10-01)
 **Decision:** The Docker container is the core of Spark for teams. It owns one host folder, SparkRoot (for example `~/Documents/Spark`), mounted as a bind mount with a `user:` line so files stay owned by the host user. SparkRoot holds subfolders (working names: `Projects/` for snapshots, `skill/` for the skill, plus config). The container never accesses any other host folder. Outside sources may also read and write SparkRoot.
 **Reasoning:** One folder gives later workflow pieces a single place to read from and feed into. A bind mount, not a named volume, so host-side tools can reach the files.
 **Alternatives considered:** Mounting host source folders into the container (today's Docker route); rejected because the container should not touch the host beyond SparkRoot.
@@ -57,7 +73,7 @@ last_updated: 2026-10-01
 
 ### Phase 2: the worker runs on the host
 **Date:** 2026-10-01
-**Status:** Accepted, not yet built
+**Status:** Active (built 2026-10-01)
 **Decision:** The worker (today's collector) runs on the host, not in the container. It reads its scan roots from a settings file in SparkRoot, searches them for `spark.md`, and copies each one into SparkRoot. That is all it does.
 **Reasoning:** The container must not reach host folders; SparkRoot is the only link between host and container.
 **Alternatives considered:** Mounting `~` read-only into the container; rejected (see above).
@@ -65,7 +81,7 @@ last_updated: 2026-10-01
 
 ### Phase 2: no machine ID; files are named projectName__projectType.md
 **Date:** 2026-10-01
-**Status:** Accepted, not yet built
+**Status:** Active (built 2026-10-01)
 **Decision:** Remove `MACHINE_ID` entirely. The snapshot filename is built from the snapshot's own front matter: `projectName__projectType.md`, both parts camelCase (for example `Spark Web App` + `side-project` → `sparkWebApp__sideProject.md`). Two scanned projects that produce the same filename: copy the first, skip the rest, log a warning.
 **Reasoning:** Machine ID added complexity with no benefit to anyone. Same name and same type twice is almost certainly a mistake worth surfacing.
 **Alternatives considered:** Last one wins (silent loss); path in the name (long, unstable names).
@@ -73,7 +89,7 @@ last_updated: 2026-10-01
 
 ### Phase 2: no automatic deletion
 **Date:** 2026-10-01
-**Status:** Accepted, not yet built
+**Status:** Active (built 2026-10-01)
 **Decision:** The worker never deletes files. Removing a project from the dashboard means deleting its file from SparkRoot by hand.
 **Reasoning:** Without machine ID the worker cannot tell its own copies from files written by outside sources. "For now" — may be revisited.
 **Alternatives considered:** Keeping prune (delete copies not found this run).
@@ -81,7 +97,7 @@ last_updated: 2026-10-01
 
 ### Phase 2: settings page; all persistent state in SparkRoot
 **Date:** 2026-10-01
-**Status:** Accepted, not yet built
+**Status:** Active (built 2026-10-01)
 **Decision:** The front end stays as it is, plus a settings page that manages scan roots (add/remove), project types, and remote server connections. Everything that must survive a container rebuild is stored in SparkRoot, including remote server API keys.
 **Reasoning:** Keeps the "files, no database" approach; SparkRoot is already the persistent folder.
 **Alternatives considered:** Secrets in a separate mount or a restricted subfolder. Deferred.
@@ -89,7 +105,7 @@ last_updated: 2026-10-01
 
 ### Phase 2: project types are data
 **Date:** 2026-10-01
-**Status:** Accepted, not yet built
+**Status:** Active (built 2026-10-01)
 **Decision:** Project types are no longer fixed in `skill/format.md`. They are edited on the settings page, stored in SparkRoot, and read by both the skill and the web app's validation.
 **Reasoning:** Teams need their own types.
 **Alternatives considered:** None discussed.
@@ -97,7 +113,7 @@ last_updated: 2026-10-01
 
 ### Phase 2: setup creates the skill symlink; login off by default
 **Date:** 2026-10-01
-**Status:** Accepted, not yet built
+**Status:** Active (built 2026-10-01)
 **Decision:** The skill lives in SparkRoot; setup symlinks `~/.claude/skills/spark` to it. Login stays off for local use and is turned on at setup when requested.
 **Reasoning:** Local single-user use should need no login.
 **Alternatives considered:** Requiring login for the settings page.
@@ -115,7 +131,7 @@ revision: 1
 **Decision:** No database or API; the web app reads `<machine>__<folder>.md` files from a directory on every request.
 **Reasoning:** Stated in README ("No database, no API"). Snapshots are few and small, and files are easy to inspect, sync, and back up.
 **Alternatives considered:** Not recorded in the repo.
-**Consequences:** No caching or indexing layer; every page view rereads the directory. Adding persistence would break this contract.
+**Consequences:** No caching or indexing layer; every page view rereads the directory. Adding persistence would break this contract. Phase 2 renamed the files (`projectName__projectType.md`) and added `Config/*.json` settings; the principle is unchanged.
 
 <!-- mex:entity
 id: mx_01M3QT58ZN7KW7H1V8YYH9FDND
@@ -139,7 +155,7 @@ revision: 1
 -->
 ### Collector pushes files; separate writer and reader permissions
 **Date:** 2026-09-29
-**Status:** Superseded by "Phase 2: the worker runs on the host" (2026-10-01, takes effect when phase 2 is built)
+**Status:** Superseded by "Phase 2: the worker runs on the host" (2026-10-01, built)
 **Decision:** Collectors upload over SMB (or copy locally) into the data dir. The web app runs as a separate account with read-only access.
 **Reasoning:** `INSTALL.md`: "a compromised web app can't change snapshots". SMB stays LAN-only.
 **Alternatives considered:** Not recorded in the repo.
@@ -153,7 +169,7 @@ revision: 1
 -->
 ### Never prune on an empty scan
 **Date:** 2026-09-29
-**Status:** Superseded by "Phase 2: no automatic deletion" (2026-10-01, takes effect when phase 2 is built)
+**Status:** Superseded by "Phase 2: no automatic deletion" (2026-10-01, built)
 **Decision:** The collector deletes this machine's stale files only when the current scan found at least one `spark.md`.
 **Reasoning:** Comment in `collector/main.go`: an empty scan more likely means a wrong or missing root than that every project is gone.
 **Alternatives considered:** Not recorded in the repo.
@@ -171,4 +187,4 @@ revision: 1
 **Decision:** Login is off unless both `SPARK_USERNAME` and `SPARK_PASSWORD` are set. Sessions are HMAC-signed expiry cookies keyed from the credentials.
 **Reasoning:** `web/auth.go`: no session store needed, and changing the password signs everyone out. Failed logins are serialized behind a 1-second delay to limit guessing.
 **Alternatives considered:** Not recorded in the repo.
-**Consequences:** No multi-user support. Sessions last 30 days and can't be revoked individually.
+**Consequences:** No multi-user support. Sessions last 30 days and can't be revoked individually. Phase 2: off by default for local use; when on, it also guards the settings page.

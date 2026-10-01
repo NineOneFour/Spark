@@ -20,7 +20,7 @@ edges:
     condition: when asking why the format is small and strict
 # Graph indexed 0 files at setup (Go not indexed), so no grounding is possible yet.
 grounds_to: []
-last_updated: 2026-09-29
+last_updated: 2026-10-01
 ---
 
 # Snapshot Format
@@ -28,17 +28,17 @@ last_updated: 2026-09-29
 The spec is `skill/format.md`; the skeleton is `skill/template.md`. The web app enforces it in `web/projects.go`. Those three must agree.
 
 ## Filename (collector → web)
-- The collector writes `<MACHINE_ID>__<folder>.md`, where `<folder>` is the folder that holds `spark.md`.
-- `parseFile` splits on the first `__`; a missing or empty half makes the file invalid. That is why `MACHINE_ID` must not contain `__`, `/`, or `\`.
-- The filename without `.md` is the project `ID` used in `/p/{id}`.
-- Dot-files and non-`.md` files are ignored, so the collector's `.<name>.tmp` files are never parsed.
+- The collector writes `Projects/<camel(project)>__<camel(project_type)>.md`. `camel_case` joins the letter/digit runs (`Spark / Web App` → `sparkWebApp`, `side-project` → `sideProject`).
+- Same target name twice in one run (case-insensitive): the first path (sorted) is copied, the rest are skipped with a warning.
+- The web app does not parse the filename; the filename without `.md` is only the project `ID` used in `/p/{id}`. Name and type come from front matter.
+- Dot-files and non-`.md` files are ignored, so `.<name>.tmp` temp files are never parsed.
 
 ## Front Matter (validated in `parseFile`)
 - Must start with `---\n` and close with `\n---\n` (CRLF is normalized first).
 - `project` and `description`: required, non-empty.
-- `last_updated`: must parse as `time.RFC3339` (offset required). It decides which snapshot wins under `SPARK_MERGE`.
+- `last_updated`: must parse as `time.RFC3339` (offset required).
 - `priority`: one of `1`–`5` or `archived` (`validPriority`). `archived` files are dropped from the dashboard.
-- `project_type`: one of `key-project`, `side-project`, `experiment`, `just-for-fun` (`validType`).
+- `project_type`: a `name` listed in `SparkRoot/Config/project_types.json` (reread per request in `loadProjects`). Defaults: `key-project`, `side-project`, `experiment`, `just-for-fun`. Names match `typeNameRe` (lowercase, hyphen-joined).
 - An invalid file is skipped and logged once per distinct error (`reportInvalid`), not on every request.
 
 ## Sections (`parseSections`)
@@ -47,5 +47,5 @@ The spec is `skill/format.md`; the skeleton is `skill/template.md`. The web app 
 - All other sections render as Markdown prose through goldmark. Raw HTML is escaped by default, and that is load-bearing for safety.
 
 ## Presentation Coupling
-- Cards get CSS classes `p-<priority>` and `t-<project_type>` (`web/templates/index.html`), defined in `web/static/style.css`. A new priority or type value needs matching CSS.
+- Cards get CSS classes `p-<priority>` and `t-<project_type>` (`web/templates/index.html`, `project.html`). Their colors are not in `style.css`: `GET /colors.css` generates `--pc`/`--tc` from `priority_colors.json` and `project_types.json`. A new type needs only a settings entry.
 - The skill asks the user for priority using names (Right now … Shelved) mapped to the stored values in `format.md`, unless the invocation gives one (`Spark, go 5`, `Spark, go archived`).

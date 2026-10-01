@@ -23,8 +23,7 @@ Lookup table for all pattern files in this directory. Check here before starting
 
 | Pattern | Use when |
 |---------|----------|
-| [add-config-setting.md](add-config-setting.md) | Adding an environment/env-file setting to the collector or web app |
+| [add-config-setting.md](add-config-setting.md) | Adding a web env setting or a SparkRoot/Config settings file |
 | [add-web-page.md](add-web-page.md) | Adding a new page, route, or handler to the web dashboard |
 | [change-snapshot-format.md](change-snapshot-format.md) | Adding or changing a spark.md field, priority/type value, or section |
 | [debug-missing-card.md](debug-missing-card.md) | A project's snapshot is missing, stale, or wrong on the dashboard |
-| [deploy-central-server.md](deploy-central-server.md) | Deploying Spark to a dedicated server (Samba + spark-web) and pointing collectors at it |

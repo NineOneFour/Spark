@@ -1,6 +1,6 @@
 # Phase 2 Plan: Container as the Core
 
-Status: planned 2026-10-01. Steps 1–6 built 2026-10-01; step 7 (MEX scaffold) remains. The decisions behind this plan are recorded in
+Status: planned 2026-10-01. All 7 steps built 2026-10-01. Phase 3 (remote servers) is not planned yet. The decisions behind this plan are recorded in
 `.mex/context/decisions.md` under "Phase 2". Read that file and `.mex/ROUTER.md` before starting.
 
 ## Goal
@@ -118,7 +118,8 @@ Files: `Dockerfile`, `docker/entrypoint.sh` (the Docker build is broken until th
 - Rewrite `INSTALL.md` around the new shape. Remove or update the central-server section per open question 7.
 - Done when: `docker compose up -d` with the example file serves the dashboard from SparkRoot.
 
-### 7. MEX scaffold (about 20 min)
+### 7. MEX scaffold (done 2026-10-01)
+Built: `AGENTS.md` non-negotiables and commands, `ROUTER.md` state, all `context/` files, and the patterns rewritten for SparkRoot. `patterns/deploy-central-server.md` retired. `mex check` still flags SparkRoot runtime paths (`Config/…`, `Projects/…`) as missing; they exist only on a deployed machine.
 - `.mex/AGENTS.md` non-negotiables: replace "the web app only reads", "never prune on an empty scan" and the machine-id filename scheme with the new rules.
 - Update `context/architecture.md`, `context/setup.md`, `context/snapshot-format.md`, `ROUTER.md` current state.
 - Mark the phase 2 decisions in `context/decisions.md` as Active (built).

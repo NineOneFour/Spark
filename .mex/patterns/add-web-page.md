@@ -12,7 +12,7 @@ edges:
   - target: context/conventions.md
     condition: for error handling and the verify checklist
 grounds_to: []
-last_updated: 2026-09-29
+last_updated: 2026-10-01
 mex:
   id: mx_01M3QT591MQX0WQ8C6P6K8YGGY
   type: pattern
@@ -36,7 +36,7 @@ mex:
 ## Steps
 1. Create `web/templates/<page>.html` defining `{{define "content"}}…{{end}}`; set `Title` in the data map for `base.html`.
 2. Add `"<page>"` to the page list in `main()` so it gets parsed.
-3. Write a `func (s *server) <page>(w, r)` handler; load data via `loadProjects(s.cfg.DataDir, s.cfg.Merge)` if needed, then `s.render(w, "<page>", data)`.
+3. Write a `func (s *server) <page>(w, r)` handler; load data via `loadProjects(s.cfg.Root)` if needed, then `s.render(w, "<page>", data)`.
 4. Register it: `mux.HandleFunc("GET /<path>", s.auth.require(s.<page>))`.
 5. Add styles to `web/static/style.css`; rebuild (assets are embedded).
 
@@ -44,7 +44,7 @@ mex:
 - A template missing from the page list panics at startup (`template.Must`) or renders nothing (a nil map entry).
 - CSP is `default-src 'self'`: no inline `<script>` or `style=""`, and no third-party hosts except Google Fonts. Update `securityHeaders` deliberately if needed.
 - Use `GET /{$}`-style exact patterns; `GET /` alone matches everything.
-- Handlers are GET-only and read-only. Don't add endpoints that write to the data dir.
+- GET handlers are read-only. A POST that changes settings goes through `s.updateSettings(change)` (CSRF + `Sec-Fetch-Site`/`Origin` check, write lock, error re-render), and its form needs the hidden `csrf` field. Never write to `Projects/`.
 - Never wrap user-controlled strings in `template.HTML`; only goldmark output is trusted.
 
 ## Verify

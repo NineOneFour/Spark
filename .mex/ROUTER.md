@@ -28,18 +28,21 @@ Then read this file fully before doing anything else in this session.
 ## Current Project State
 
 **Working:**
-- Skill (`skill/SKILL.md`) generates `spark.md` per `skill/format.md`
-- Collector: scan, copy to a local folder or SMB share, prune stale files; systemd user timer
-- Web app: card grid color-coded by priority/type, per-project page, optional login, `SPARK_MERGE`
-- Three deployment routes documented in `INSTALL.md`: localhost, Docker (one container, collector loop), central server (Samba + Caddy)
+- Phase 2 is built (2026-10-01): one Docker image owns SparkRoot (`Projects/`, `Skill/`, `Config/`) and fills it on every start
+- Skill (`skill/SKILL.md`) generates `spark.md` per `skill/format.md`; allowed types come from `Config/project_types.json`
+- Collector: `collector.py` in SparkRoot, run by cron on the host; copies to `Projects/projectName__projectType.md`, never deletes
+- Web app: card grid, per-project page, settings page (scan roots, project types, type and priority colors), optional login
+- `setup.sh` (host): skill symlink and cron line. `INSTALL.md` documents the Docker route plus a short no-Docker route
 
 **Not yet built:**
-- Phase 2 (container as the core, SparkRoot, host worker, settings page): planned in `phase2-plan.md`, decisions in `context/decisions.md`
+- Phase 3: remote server connections (push/pull between SparkRoots); first question still open, see `phase2-plan.md` "Phase 3"
+- Publishing the image to Docker Hub (the user will do this; docs use the placeholder name `spark`)
 - Automated tests and CI
 - Code-graph coverage: `.mex/graph.db` indexed 0 files at setup (Go), so the scaffold has no `grounds_to` entries
 
 **Known issues:**
-- No pruning when a scan finds zero files (by design), so the last removed project's card stays
+- No automatic deletion (by design): renaming a project or changing its type leaves the old card until its file is deleted by hand
+- Without login, anyone who can reach the port can change settings; keep it on `127.0.0.1` unless login is on
 - Web rereads and reparses the whole data dir on every request (fine at current scale)
 
 ## Routing Table

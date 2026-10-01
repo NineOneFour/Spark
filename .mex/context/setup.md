@@ -9,12 +9,11 @@ triggers:
   - "how do I run"
   - "local development"
   - "docker"
-  - "systemd"
+  - "cron"
+  - "SparkRoot"
 edges:
   - target: context/stack.md
     condition: when specific technology versions or library details are needed
-  - target: patterns/deploy-central-server.md
-    condition: when deploying Spark to a dedicated server with Samba and systemd
   - target: context/architecture.md
     condition: when understanding how components connect during setup
   - target: patterns/add-config-setting.md
@@ -22,7 +21,7 @@ edges:
   - target: patterns/debug-missing-card.md
     condition: when setup runs but cards do not appear
 grounds_to: []
-last_updated: 2026-09-29
+last_updated: 2026-10-01
 mex:
   id: mx_01M3QT5915NN48SVYHK9KSXFTW
   type: guide
@@ -43,7 +42,7 @@ mex:
 
 # Setup
 
-Full user-facing guide: `INSTALL.md` (localhost, Docker, central server routes). Deploying to a dedicated server: `patterns/deploy-central-server.md`.
+Full user-facing guide: `INSTALL.md` (Docker first, plus a short "without Docker" route). It is also copied into every SparkRoot.
 
 <!-- mex:entity
 id: mx_01M3QT590YCF4HB15N75G17C7A
@@ -52,9 +51,10 @@ status: promoted
 revision: 1
 -->
 ## Prerequisites
-- Go 1.23+ (to build locally; Docker builds for you)
+- Docker (the normal route), or Go 1.23+ to build the web app yourself
+- `python3` on the host (the collector, stdlib only) and `crontab` (or another scheduler)
 - A coding agent that loads skills from `~/.claude/skills/` (for the skill)
-- Optional: Docker; Samba + Caddy for the central-server route
+- Development: Go is not required locally; `docker run --rm -u $(id -u):$(id -g) -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/gopath -v "$PWD":/src -w /src golang:1.23 go vet ./...` in `web/` works without it
 
 <!-- mex:entity
 id: mx_01M3QT590QTQQMEA6608V4TFA1
@@ -63,13 +63,13 @@ status: promoted
 revision: 1
 -->
 ## First-time Setup
-1. `ln -s "$PWD/skill" ~/.claude/skills/spark` (installs the skill)
-2. `(cd collector && go build -o collector .)`
-3. `(cd web && go build -o web .)`
-4. `SCAN_ROOT=~/Projects ./collector/collector`. It writes to `collector/projects/` by default (next to the binary).
-5. `SPARK_DATA_DIR=collector/projects ./web/web`, then open http://127.0.0.1:8080
+1. `mkdir -p ~/Documents/Spark` (create SparkRoot yourself; if Docker creates it, root owns it)
+2. `docker build -t spark .` then `docker run -d --name spark -p 127.0.0.1:8080:8080 --user "$(id -u):$(id -g)" -v ~/Documents/Spark:/spark spark`
+3. The container fills SparkRoot (`collector.py`, `setup.sh`, `INSTALL.md`, `Skill/`, `Config/` defaults, `Projects/`)
+4. `~/Documents/Spark/setup.sh` on the host: links `~/.claude/skills/spark` → `SparkRoot/Skill` and adds the cron line
+5. Add scan roots on http://127.0.0.1:8080/settings, then `python3 ~/Documents/Spark/collector.py` to collect right away
 
-Tip: copy both binaries into one folder (for example `~/spark/`) so their default `projects/` dirs coincide and no config is needed.
+Testing without touching your real setup: point the container at a scratch folder, and run `setup.sh` with `HOME=<scratch>` and a stub `crontab` first on `PATH`.
 
 <!-- mex:entity
 id: mx_01M3QT590F1Z0TK14XQ2C16CPP
@@ -78,19 +78,14 @@ status: promoted
 revision: 1
 -->
 ## Environment Variables
-Collector (env file default: `~/.config/spark/collector.env`; env vars win):
-- `SCAN_ROOT` (required) — comma-separated roots; `~` expanded
-- `MACHINE_ID` (optional, default `local`) — no `__` or path separators; unique per machine
-- `TARGET_DIR` (optional) — local destination; default `projects/` next to the binary
-- `SMB_HOST` (optional) — switches to SMB; then `SMB_SHARE`, `SMB_USER`, `SMB_PASSWORD` are required; port defaults to 445
+Collector: none. SparkRoot is the folder `collector.py` sits in; scan roots come from `Config/scan_roots.json`.
 
 Web (env file only via `-config`; env vars win; all optional):
-- `SPARK_DATA_DIR` — default `projects/` next to the binary
-- `SPARK_ADDR` — default `127.0.0.1:8080`
-- `SPARK_USERNAME` + `SPARK_PASSWORD` — set both or neither; neither means login off
-- `SPARK_MERGE` — comma-separated folder names merged across machines (newest `last_updated` wins)
+- `SPARK_ROOT`: default the folder the binary sits in; `/spark` in the image
+- `SPARK_ADDR`: default `127.0.0.1:8080`; `:8080` in the image
+- `SPARK_USERNAME` + `SPARK_PASSWORD`: set both or neither; neither means login off
 
-Docker only: `COLLECT_INTERVAL` (seconds, default 900; `0` disables the collector loop).
+Deployment settings (JSON in `SparkRoot/Config/`, created with defaults by the web app): `scan_roots.json`, `project_types.json`, `priority_colors.json`. See `INSTALL.md` "Settings".
 
 <!-- mex:entity
 id: mx_01M3QT59096W1D8FD7RV6HWXY8
@@ -99,12 +94,11 @@ status: promoted
 revision: 1
 -->
 ## Common Commands
-- `(cd collector && go build -o collector .)` — build collector
-- `(cd web && go build -o web .)` — build web app
-- `go vet ./...` / `gofmt -l .` in each module — only static checks (no tests exist)
-- `docker build -t spark .` then `docker run ... -v ~/spark-data:/projects -v ~/code:/sources/code:ro spark`
-- `systemctl --user enable --now spark-collector.timer` — schedule the collector every 15 min
-- `journalctl --user -u spark-collector` — collector logs
+- `(cd web && go build -o web .)`: build the web app
+- `go vet ./...` / `gofmt -l .` in `web/`: only static checks (no tests exist)
+- `python3 SparkRoot/collector.py`: run the collector once (it exits 1 if `Config/scan_roots.json` is missing)
+- `docker build -t spark .` then `docker run ... -v ~/Documents/Spark:/spark --user "$(id -u):$(id -g)" spark`
+- `docker logs spark`: web app log; `SparkRoot/collector.log`: last collector run
 
 <!-- mex:entity
 id: mx_01M3QT5902KCPB248BAKK0N03Y
@@ -113,12 +107,14 @@ status: promoted
 revision: 1
 -->
 ## Common Issues
-From documented behavior in `INSTALL.md` and the code (no issue history yet):
+From documented behavior in `INSTALL.md` and the code:
 
-**Docker collector can't write:** Docker created the data folder as root. Create it first and run with `--user "$(id -u):$(id -g)"`.
+**Container exits at start, "not writable":** Docker created the SparkRoot folder as root, or `--user` is missing. Create the folder first and run with `--user "$(id -u):$(id -g)"`.
 
 **Login cookie not kept on plain HTTP:** the cookie is `Secure` only with TLS or `X-Forwarded-Proto: https`. Behind a proxy, make sure the proxy sends that header.
 
-**Collector deletes nothing / cards stick around:** a scan that finds zero files skips pruning on purpose. Check `SCAN_ROOT`.
+**Old cards stick around:** nothing is deleted automatically. Delete the file from `SparkRoot/Projects/` by hand.
 
-**Web and collector disagree on folder:** both default to `projects/` next to their *own* binary. Set `TARGET_DIR` / `SPARK_DATA_DIR` explicitly when the binaries live apart.
+**Edits to `Skill/` or `collector.py` vanish:** the container overwrites them on every start. Customize through `Config/`, or change the repo and rebuild the image.
+
+**`cp` prompts in your shell:** some shells alias `cp` to `cp -i`; use `command cp -f` in scripts and tests.

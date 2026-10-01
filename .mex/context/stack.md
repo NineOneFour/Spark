@@ -16,27 +16,28 @@ edges:
     condition: when installing the toolchain or building binaries
 # Broad inventory: ground only claims embodied by a small number of symbols.
 grounds_to: []
-last_updated: 2026-09-29
+last_updated: 2026-10-01
 ---
 
 # Stack
 
 ## Core Technologies
-- **Go 1.23** — both binaries; `CGO_ENABLED=0` static builds in Docker. Cross-compile with `GOOS`/`GOARCH` (for example, Raspberry Pi arm64).
+- **Go 1.23**: the web app; `CGO_ENABLED=0` static build in Docker. Cross-compile with `GOOS`/`GOARCH` (for example, Raspberry Pi arm64).
+- **Python 3, standard library only**: the collector (`collector/collector.py`), run on the host. No pip, no PyYAML.
 - **Go standard library `net/http`** — routing via Go 1.22+ method/wildcard patterns (`GET /p/{id}`, `r.PathValue`). No router framework.
 - **`html/template` + `embed`** — server-rendered pages; templates and static files compiled into the binary.
 - **Plain CSS** (`web/static/style.css`) — no build step, no JS framework.
 - **Markdown skill files** — the agent-side generator; no code.
-- **Docker (alpine 3.20)** and **systemd user units** — deployment/scheduling.
+- **Docker (alpine 3.20)**: the one image that holds everything; **cron** on the host schedules the collector.
+- **POSIX sh**: `docker/entrypoint.sh` and `setup.sh`.
 
 ## Key Libraries
 - **github.com/yuin/goldmark** (web) — Markdown rendering; relied on for default raw-HTML escaping.
 - **gopkg.in/yaml.v3** (web) — front matter parsing into the `frontMatter` struct.
-- **github.com/hirochachacha/go-smb2** (collector) — SMB2 client with NTLM for uploads to the central Samba share. Its `Rename` does not overwrite, which drives `smbTarget.Put`.
 
 ## What We Deliberately Do NOT Use
-- No database or ORM: the data dir of Markdown files is the store.
-- No frontend framework or JS bundler: pages are static HTML plus CSS.
+- No database or ORM: Markdown files in `SparkRoot/Projects/` and JSON in `Config/` are the store.
+- No frontend framework, JS bundler, or JavaScript at all: pages are server-rendered HTML forms plus CSS.
 - No HTTP router or config library: stdlib mux and a small hand-written env-file reader.
 - No session store: auth is a stateless HMAC cookie.
 

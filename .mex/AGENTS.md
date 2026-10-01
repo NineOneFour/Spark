@@ -1,35 +1,37 @@
 ---
 name: agents
 description: Always-loaded project anchor. Read this first. Contains project identity, non-negotiables, commands, and pointer to ROUTER.md for full context.
-last_updated: 2026-09-29
+last_updated: 2026-10-01
 ---
 
 # Spark
 
 ## What This Is
-A project-memory dashboard: an agent skill writes `spark.md` snapshots, a Go collector copies them to one folder (local or SMB), and a Go web app renders them as cards.
+A project-memory dashboard: an agent skill writes `spark.md` snapshots, a Python collector on the host copies them into one folder (SparkRoot), and a Go web app in a Docker container renders them as cards and manages settings.
 
 ## Non-Negotiables
 - `skill/format.md` is the single contract for `spark.md`; change it, `skill/template.md`, and `web/projects.go` validation together
-- No database, no API: Markdown files in the data directory are the only source of truth
-- The web app only reads the data directory; it never writes, renames, or deletes snapshots
-- Collector writes must stay atomic (temp file + rename), and it must never prune on an empty scan
+- No database, no API: Markdown files in `SparkRoot/Projects/` and JSON in `SparkRoot/Config/` are the only source of truth
+- The container never touches host folders outside SparkRoot; host-only steps belong in `setup.sh`
+- The web app writes only `Config/*.json`; it never writes, renames, or deletes snapshots
+- Nothing deletes snapshots automatically; all writes stay atomic (temp file + rename)
+- Snapshot filenames are `projectName__projectType.md` from front matter; no machine ID anywhere
 - Snapshot content is untrusted: keep goldmark's default HTML escaping and the CSP header
 
 ## Commands
-Two separate Go modules (Go 1.23+), no test suite yet:
-- Build collector: `(cd collector && go build -o collector .)`
+One Go module (`web/`, Go 1.23+) and one Python script (`collector/collector.py`, stdlib), no test suite yet:
 - Build web: `(cd web && go build -o web .)`
-- Check: `go vet ./...` and `gofmt -l .` inside each module
-- Run locally: `SCAN_ROOT=~/code ./collector/collector` then `./web/web` (http://127.0.0.1:8080)
-- Docker: `docker build -t spark .`
+- Check: `go vet ./...` and `gofmt -l .` in `web/`; `python3 -m py_compile collector/collector.py`
+- No local Go? Run them in `golang:1.23` with `docker run --rm -u $(id -u):$(id -g) -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/gopath -v "$PWD/web":/src -w /src golang:1.23 ...`
+- Run locally: `SPARK_ROOT=<scratch> ./web/web`, copy `collector/collector.py` into that SparkRoot, run it
+- Docker: `docker build -t spark .` then `docker run --user "$(id -u):$(id -g)" -v <SparkRoot>:/spark -p 127.0.0.1:8080:8080 spark`
 
 ## Code Graph
 Use the smallest relevant structured resolver. For Inbox or Relay mutations, resolve only the intended action with `mex inbox contract --action <command-id> --json` or `mex relay contract --action <command-id> --json`; use `mex capabilities --json` only for broader capability discovery. If the user explicitly asks to create, save, or draft a checkout-local Inbox or Relay draft, preview and apply that exact draft without asking for redundant confirmation. Deleting a local draft, or publishing, approving, rejecting, withdrawing, marking stale, repairing, taking or acknowledging, or closing, requires fresh explicit confirmation after semantic preview. Treat Git commit, push, and pull as separate actions requiring their own authorization.
 
 The repo is indexed into `.mex/graph.db`. Use it to avoid re-reading code you already have — it is one tool alongside Grep/Glob, not a replacement for them.
 - **READ BROAD, GROUND TIGHT:** read the wide `scope` neighborhood to understand a task, but ground scaffold claims (`grounds_to`, `mex://` anchors) only to the few exact functions that embody them, using ids and fingerprints copied from graph output. Never invent ids or fingerprints.
-- Known limit: at setup the graph indexed 0 files (this repo is Go-only), so scaffold files carry `grounds_to: []`. If `scope` returns `no-match`, fall back to Grep/Read. The code is small (~1,000 lines of Go).
+- Known limit: at setup the graph indexed 0 files (Go and Python are not indexed), so scaffold files carry `grounds_to: []`. If `scope` returns `no-match`, fall back to Grep/Read. The code is small (~1,300 lines of Go, ~150 of Python).
 - If you know the symbol name, go straight to it: `mex graph query <who-calls|what-calls|where-defined> <symbol>` and `mex graph get <id>` are exact and cheap. This is the strongest part of the graph. Give it exact names — an approximate name can return a confident wrong match.
 - Exploring an unfamiliar task? `mex graph scope "<task>"` returns bounded, source-backed JSONL context plus trustworthy execution flows. Scope matches on words, not meaning, so treat it as starting evidence rather than a complete answer.
 - Treat source returned by the graph as ALREADY READ; do not re-open those files.
