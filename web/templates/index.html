@@ -1,6 +1,7 @@
 {{define "content"}}
 <header class="site">
   <h1 class="wordmark">Spark</h1>
+  <a class="nav" href="/settings">Settings</a>
 </header>
 <main class="shelf">
   {{if .Projects}}
@@ -14,7 +15,6 @@
         <span class="card-desc">{{.Description}}</span>
         <span class="card-foot">
           <time datetime="{{.Updated.Format "2006-01-02T15:04:05Z07:00"}}">{{date .Updated}}</time>
-          {{if .ShowMachine}}<span class="machine">{{.Machine}}</span>{{end}}
         </span>
       </a>
     </li>

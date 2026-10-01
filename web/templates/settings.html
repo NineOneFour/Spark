@@ -1,0 +1,80 @@
+{{define "content"}}
+<header class="site">
+  <h1 class="wordmark">Spark</h1>
+  <a class="nav" href="/">All projects</a>
+</header>
+<main class="settings">
+  <h2 class="settings-title">Settings</h2>
+  {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+
+  <section>
+    <h3>Scan roots</h3>
+    <p class="hint">Folders on the host that the collector searches for <code>spark.md</code>. Changes apply on its next run.</p>
+    {{if .ScanRoots}}
+    <ul class="rows">
+      {{range .ScanRoots}}
+      <li>
+        <form method="post" action="/settings/scan-roots" class="row">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <input type="hidden" name="path" value="{{.}}">
+          <code class="row-name">{{.}}</code>
+          <button name="action" value="remove" class="quiet">Remove</button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="hint">No scan roots yet, so the collector finds nothing.</p>
+    {{end}}
+    <form method="post" action="/settings/scan-roots" class="row add">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <label class="sr" for="path">Folder path</label>
+      <input id="path" name="path" placeholder="~/Projects" required autocapitalize="none" spellcheck="false">
+      <button name="action" value="add">Add</button>
+    </form>
+  </section>
+
+  <section>
+    <h3>Project types</h3>
+    <p class="hint">The skill picks a type from this list. Snapshots with a type that isn't listed are hidden.</p>
+    <ul class="rows">
+      {{range .Types}}
+      <li>
+        <form method="post" action="/settings/types" class="row">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <input type="hidden" name="name" value="{{.Name}}">
+          <input type="color" name="color" value="{{.Color}}" aria-label="Color for {{.Name}}">
+          <span class="row-name">{{.Name}}</span>
+          <button name="action" value="save">Save color</button>
+          <button name="action" value="remove" class="quiet">Remove</button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+    <form method="post" action="/settings/types" class="row add">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="color" name="color" value="#64748b" aria-label="Color for the new type">
+      <label class="sr" for="type-name">Type name</label>
+      <input id="type-name" name="name" placeholder="client-work" required autocapitalize="none" spellcheck="false">
+      <button name="action" value="add">Add</button>
+    </form>
+  </section>
+
+  <section>
+    <h3>Priority colors</h3>
+    <p class="hint">The card color for each priority, from 1 (right now) to 5 (someday maybe).</p>
+    <form method="post" action="/settings/priorities">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <ul class="rows">
+        {{range .Priorities}}
+        <li class="row">
+          <input type="color" id="color-{{.Priority}}" name="color-{{.Priority}}" value="{{.Color}}">
+          <label class="row-name" for="color-{{.Priority}}">Priority {{.Priority}}</label>
+        </li>
+        {{end}}
+      </ul>
+      <button>Save colors</button>
+    </form>
+  </section>
+</main>
+{{end}}

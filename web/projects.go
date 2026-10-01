@@ -19,8 +19,6 @@ import (
 
 var validPriority = map[string]bool{"1": true, "2": true, "3": true, "4": true, "5": true, "archived": true}
 
-var validType = map[string]bool{"key-project": true, "side-project": true, "experiment": true, "just-for-fun": true}
-
 // listSections hold "- Title" / "\t- description" items instead of prose.
 var listSections = map[string]bool{
 	"Key Decisions Outstanding": true,
@@ -30,14 +28,11 @@ var listSections = map[string]bool{
 
 type Project struct {
 	ID          string // filename without .md, used in the URL
-	Machine     string
-	Folder      string
 	Name        string
 	Description string
 	Updated     time.Time
 	Priority    string
 	Type        string
-	ShowMachine bool // set when another card has the same folder name
 	Sections    []Section
 }
 
@@ -60,22 +55,32 @@ type frontMatter struct {
 	ProjectType string `yaml:"project_type"`
 }
 
-// loadProjects reads every snapshot in dir, drops invalid and archived ones,
-// merges folders on the merge list, and returns the rest sorted by name.
-// Invalid files are logged, not shown.
-func loadProjects(dir string, merge map[string]bool) ([]*Project, error) {
+// loadProjects reads every snapshot in SparkRoot/Projects, drops invalid and
+// archived ones, and returns the rest sorted by name. A project_type must be
+// listed in project_types.json. Invalid files are logged, not shown.
+func loadProjects(root string) ([]*Project, error) {
+	types, err := loadProjectTypes(root)
+	if err != nil {
+		return nil, err
+	}
+	validType := map[string]bool{}
+	for _, t := range types {
+		validType[t.Name] = true
+	}
+
+	dir := filepath.Join(root, "Projects")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	var all []*Project
+	var projects []*Project
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || strings.HasPrefix(name, ".") || !strings.HasSuffix(name, ".md") {
 			continue
 		}
-		p, err := parseFile(filepath.Join(dir, name))
+		p, err := parseFile(filepath.Join(dir, name), validType)
 		reportInvalid(name, err)
 		if err != nil {
 			continue
@@ -83,32 +88,7 @@ func loadProjects(dir string, merge map[string]bool) ([]*Project, error) {
 		if p.Priority == "archived" {
 			continue
 		}
-		all = append(all, p)
-	}
-
-	// Keep only the newest snapshot of each merged folder.
-	newest := map[string]*Project{}
-	var projects []*Project
-	for _, p := range all {
-		key := strings.ToLower(p.Folder)
-		if !merge[key] {
-			projects = append(projects, p)
-			continue
-		}
-		if cur, ok := newest[key]; !ok || p.Updated.After(cur.Updated) {
-			newest[key] = p
-		}
-	}
-	for _, p := range newest {
 		projects = append(projects, p)
-	}
-
-	count := map[string]int{}
-	for _, p := range projects {
-		count[strings.ToLower(p.Folder)]++
-	}
-	for _, p := range projects {
-		p.ShowMachine = count[strings.ToLower(p.Folder)] > 1
 	}
 
 	sort.Slice(projects, func(i, j int) bool {
@@ -116,7 +96,7 @@ func loadProjects(dir string, merge map[string]bool) ([]*Project, error) {
 		if a != b {
 			return a < b
 		}
-		return projects[i].Machine < projects[j].Machine
+		return projects[i].ID < projects[j].ID
 	})
 	return projects, nil
 }
@@ -141,13 +121,7 @@ func reportInvalid(name string, err error) {
 	}
 }
 
-func parseFile(path string) (*Project, error) {
-	id := strings.TrimSuffix(filepath.Base(path), ".md")
-	machine, folder, ok := strings.Cut(id, "__")
-	if !ok || machine == "" || folder == "" {
-		return nil, errors.New("filename is not <machine-id>__<folder>.md")
-	}
-
+func parseFile(path string, validType map[string]bool) (*Project, error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -177,9 +151,7 @@ func parseFile(path string) (*Project, error) {
 
 	sections := parseSections(body)
 	return &Project{
-		ID:          id,
-		Machine:     machine,
-		Folder:      folder,
+		ID:          strings.TrimSuffix(filepath.Base(path), ".md"),
 		Name:        meta.Project,
 		Description: meta.Description,
 		Updated:     updated,

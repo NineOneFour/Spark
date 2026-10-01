@@ -1,17 +1,9 @@
-/* Colors live here so they are easy to change. */
+/* Priority and type colors are per deployment: /colors.css sets --pc and
+   --tc on the .p-<priority> and .t-<type> classes, from SparkRoot/Config. */
 :root {
-  /* priority: card color */
-  --priority-1: #dc2626; /* red */
-  --priority-2: #f59e0b; /* amber, between red and green */
-  --priority-3: #16a34a; /* green */
-  --priority-4: #0d9488; /* teal, between green and blue */
-  --priority-5: #2563eb; /* blue */
-
-  /* project type: small accent */
-  --type-key-project:  #7c3aed; /* violet */
-  --type-side-project: #475569; /* slate */
-  --type-experiment:   #db2777; /* magenta */
-  --type-just-for-fun: #f5f0e6; /* ivory */
+  /* fixed UI colors (login button, error box) */
+  --accent: #2563eb;
+  --danger: #dc2626;
 
   /* light theme base */
   --bg: #eceff3;
@@ -26,9 +18,6 @@
   --body: "Atkinson Hyperlegible", system-ui, sans-serif;
 }
 
-/* Ivory disappears on a light background. */
-:root { --type-just-for-fun-shown: #b8a67e; }
-
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #171a21;
@@ -38,8 +27,6 @@
     --rule: #333844;
     --tint: 30%;
     --band-tint: 40%;
-    --type-side-project: #94a3b8; /* slate is too dark to see on dark cards */
-    --type-just-for-fun-shown: var(--type-just-for-fun);
   }
 }
 
@@ -69,17 +56,6 @@ a { color: inherit; }
   white-space: nowrap;
 }
 
-/* Priority and type as custom properties, picked up by cards and bands. */
-.p-1 { --pc: var(--priority-1); }
-.p-2 { --pc: var(--priority-2); }
-.p-3 { --pc: var(--priority-3); }
-.p-4 { --pc: var(--priority-4); }
-.p-5 { --pc: var(--priority-5); }
-.t-key-project  { --tc: var(--type-key-project); }
-.t-side-project { --tc: var(--type-side-project); }
-.t-experiment   { --tc: var(--type-experiment); }
-.t-just-for-fun { --tc: var(--type-just-for-fun-shown); }
-
 .type-mark {
   display: block;
   width: 2rem;
@@ -103,7 +79,21 @@ a { color: inherit; }
   padding-inline: 1rem;
 }
 
-.site { padding-block: 1.75rem 1.25rem; }
+.site {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 1.75rem 1.25rem;
+}
+
+.nav {
+  color: var(--muted);
+  font-size: 0.9375rem;
+  text-underline-offset: 0.2em;
+}
+
+.nav:hover { color: var(--text); }
 
 .shelf { padding-bottom: 3rem; }
 
@@ -158,11 +148,6 @@ a { color: inherit; }
   padding-top: 0.5rem;
   color: var(--muted);
   font-size: 0.875rem;
-}
-
-.machine {
-  font-weight: 700;
-  color: var(--text);
 }
 
 .empty {
@@ -268,6 +253,102 @@ code {
   color: var(--muted);
 }
 
+/* Settings */
+
+.settings {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+}
+
+.settings-title {
+  margin: 0.5rem 0 1.5rem;
+  font: 800 2.25rem/1 var(--display);
+  letter-spacing: -0.02em;
+}
+
+.settings section {
+  margin-bottom: 1rem;
+  padding: 1.25rem;
+  border-radius: 0.875rem;
+  background: var(--surface);
+}
+
+.settings h3 {
+  margin: 0 0 0.25rem;
+  font: 700 1.25rem/1.2 var(--display);
+}
+
+.hint {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.rows {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.row.add { border-bottom: 0; }
+
+.row-name {
+  flex: 1;
+  min-width: 8rem;
+  overflow-wrap: anywhere;
+}
+
+.settings input:not([type]),
+.settings input[type="text"] {
+  flex: 1;
+  min-width: 10rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem; /* 16px keeps iOS from zooming in */
+}
+
+.settings input[type="color"] {
+  width: 2.5rem;
+  height: 2rem;
+  padding: 0.125rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.375rem;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.settings button {
+  padding: 0.5rem 0.875rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: #fff;
+  font: 700 0.9375rem var(--body);
+  cursor: pointer;
+}
+
+.settings button.quiet {
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--muted);
+}
+
+.settings button.quiet:hover { color: var(--danger); border-color: var(--danger); }
+
 /* Login */
 
 .login {
@@ -305,7 +386,7 @@ code {
   padding: 0.8125rem;
   border: 0;
   border-radius: 0.625rem;
-  background: var(--priority-5);
+  background: var(--accent);
   color: #fff;
   font: 700 1rem var(--body);
   cursor: pointer;
@@ -314,7 +395,7 @@ code {
 .error {
   margin: 0 0 1.125rem;
   padding: 0.75rem 0.875rem;
-  border-left: 0.25rem solid var(--priority-1);
+  border-left: 0.25rem solid var(--danger);
   border-radius: 0.375rem;
-  background: color-mix(in oklab, var(--priority-1) 18%, var(--surface));
+  background: color-mix(in oklab, var(--danger) 18%, var(--surface));
 }

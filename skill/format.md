@@ -75,7 +75,6 @@ Requirements:
 - Required
 - Written by the Spark skill when generating the file
 - Represents the age of the Spark snapshot
-- Decides which snapshot wins when same-named projects from different machines are merged, so it must include the time
 - Must not be derived from filesystem timestamps
 - Must not be derived from Git timestamps
 
@@ -104,16 +103,18 @@ No other values are valid.
 
 Required controlled value.
 
-Supported values:
+Each deployment keeps its own list, with a color for each type, in `Config/project_types.json` in SparkRoot. The skill lives in `SparkRoot/Skill/` (reached through a symlink), so the file is `../Config/project_types.json` from the skill folder's real path:
 
-```text
-key-project
-side-project
-experiment
-just-for-fun
+```json
+[
+  {"name": "key-project", "color": "#7c3aed"},
+  {"name": "side-project", "color": "#64748b"}
+]
 ```
 
-No other values are valid.
+The value is a `name` from that file: lowercase letters and digits, words joined by hyphens. Only listed names are valid; the web application hides a snapshot whose type is not listed.
+
+The defaults are `key-project`, `side-project`, `experiment` and `just-for-fun`.
 
 ## Required Section Order
 

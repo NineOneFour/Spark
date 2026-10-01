@@ -3,7 +3,7 @@ project: Project Name
 description: One-sentence description for the dashboard card.
 last_updated: YYYY-MM-DDTHH:MM:SS±HH:MM
 priority: 1 | 2 | 3 | 4 | 5 | archived
-project_type: key-project | side-project | experiment | just-for-fun
+project_type: <a name from ../Config/project_types.json>
 ---
 
 # Project Description

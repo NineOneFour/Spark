@@ -31,6 +31,22 @@ last_updated: 2026-10-01
 <!-- Phase 2 decisions (2026-10-01). Agreed in a design session; NOT YET BUILT.
      The code still follows the older entries below until phase2-plan.md is done. -->
 
+### Phase 2: colors are per-deployment settings
+**Date:** 2026-10-01
+**Status:** Active (built, phase 2 steps 2–3)
+**Decision:** Project type colors and priority 1–5 colors are stored in `Config/project_types.json` and `Config/priority_colors.json`, one color per entry for both light and dark mode. The web app serves them as a generated `/colors.css`. Today's hardcoded colors are the defaults (side-project and just-for-fun moved to middle-ground values). Type names and colors are held to strict patterns because they are written into CSS.
+**Reasoning:** The user: each deployment carries its own colors; do types and priorities together rather than one now and the other later. One color per entry keeps the file and settings page simple.
+**Alternatives considered:** Types only; a light and dark color per entry.
+**Consequences:** `style.css` no longer contains card colors. A type missing from `project_types.json` hides its snapshots.
+
+### Phase 2: the collector is a Python script inside SparkRoot
+**Date:** 2026-10-01
+**Status:** Active (built, phase 2 step 1)
+**Decision:** The Go collector is replaced by `collector/collector.py` (Python 3, standard library only), installed at `SparkRoot/collector.py`. SparkRoot is the folder the script sits in, so it needs no env file or path setting. It reads `Config/scan_roots.json` and writes `Projects/projectName__projectType.md`. The name "collector" stays. The SMB target and central-server route are dropped. SparkRoot subfolders are `Projects/`, `Skill/`, `Config/`; settings are JSON, one file per concern. Old `machine__folder.md` files are deleted, not migrated.
+**Reasoning:** The user: a script is enough, no binary needed; and a collector living in SparkRoot has no reason to be told where SparkRoot is. Scheduling is left to the user (cron).
+**Alternatives considered:** Keeping the Go binary; a `SPARK_ROOT` env var; renaming to "worker".
+**Consequences:** No Go module in `collector/`. The Docker build and `collector/systemd/*` are stale until phase 2 steps 5 and 6.
+
 ### Phase 2: the container is the core, SparkRoot is its one folder
 **Date:** 2026-10-01
 **Status:** Accepted, not yet built

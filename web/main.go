@@ -1,5 +1,6 @@
 // Command web serves the Spark dashboard: a card per project snapshot, and a
-// readable page for each one. It only reads the data directory.
+// readable page for each one. It reads snapshots from SparkRoot/Projects and
+// writes only the settings files in SparkRoot/Config.
 package main
 
 import (
@@ -9,12 +10,15 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
+	"io"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -25,17 +29,19 @@ var templateFS embed.FS
 var staticFS embed.FS
 
 type config struct {
-	DataDir  string
+	Root     string // SparkRoot
 	Addr     string
 	Username string
 	Password string
-	Merge    map[string]bool
 }
 
 type server struct {
 	cfg  config
 	auth *auth
 	tmpl map[string]*template.Template
+	csrf string
+
+	settingsMu sync.Mutex // serializes read-modify-write of settings files
 }
 
 func main() {
@@ -51,11 +57,15 @@ func main() {
 		"date": func(t time.Time) string { return t.Format("Jan 2, 2006") },
 	}
 	tmpl := map[string]*template.Template{}
-	for _, page := range []string{"index", "project", "login"} {
+	for _, page := range []string{"index", "project", "login", "settings"} {
 		tmpl[page] = template.Must(template.New("").Funcs(funcs).ParseFS(templateFS, "templates/base.html", "templates/"+page+".html"))
 	}
 
-	s := &server{cfg: cfg, tmpl: tmpl}
+	if err := ensureSettings(cfg.Root); err != nil {
+		log.Fatalf("settings: %v", err)
+	}
+
+	s := &server{cfg: cfg, tmpl: tmpl, csrf: newCSRFToken()}
 	if cfg.Username != "" {
 		s.auth = newAuth(cfg.Username, cfg.Password)
 	} else {
@@ -65,12 +75,18 @@ func main() {
 	static, _ := fs.Sub(staticFS, "static")
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
+	// Public like /static/, so the login page is styled too.
+	mux.HandleFunc("GET /colors.css", s.colors)
 	mux.HandleFunc("GET /login", s.loginPage)
 	mux.HandleFunc("POST /login", s.login)
 	mux.HandleFunc("GET /{$}", s.auth.require(s.index))
 	mux.HandleFunc("GET /p/{id}", s.auth.require(s.project))
+	mux.HandleFunc("GET /settings", s.auth.require(s.settings))
+	mux.HandleFunc("POST /settings/scan-roots", s.auth.require(s.updateSettings(s.changeScanRoots)))
+	mux.HandleFunc("POST /settings/types", s.auth.require(s.updateSettings(s.changeProjectTypes)))
+	mux.HandleFunc("POST /settings/priorities", s.auth.require(s.updateSettings(s.changePriorityColors)))
 
-	log.Printf("listening on %s, reading %s", cfg.Addr, cfg.DataDir)
+	log.Printf("listening on %s, SparkRoot is %s", cfg.Addr, cfg.Root)
 	log.Fatal(http.ListenAndServe(cfg.Addr, securityHeaders(mux)))
 }
 
@@ -82,7 +98,7 @@ func (s *server) render(w http.ResponseWriter, page string, data any) {
 }
 
 func (s *server) index(w http.ResponseWriter, r *http.Request) {
-	projects, err := loadProjects(s.cfg.DataDir, s.cfg.Merge)
+	projects, err := loadProjects(s.cfg.Root)
 	if err != nil {
 		log.Printf("load projects: %v", err)
 		http.Error(w, "Could not read the project directory. Check the server log.", http.StatusInternalServerError)
@@ -92,7 +108,7 @@ func (s *server) index(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) project(w http.ResponseWriter, r *http.Request) {
-	projects, err := loadProjects(s.cfg.DataDir, s.cfg.Merge)
+	projects, err := loadProjects(s.cfg.Root)
 	if err != nil {
 		log.Printf("load projects: %v", err)
 		http.Error(w, "Could not read the project directory. Check the server log.", http.StatusInternalServerError)
@@ -106,6 +122,32 @@ func (s *server) project(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.NotFound(w, r)
+}
+
+// colors serves the per-deployment type and priority colors as custom
+// properties for the card and band classes. Names and colors were checked
+// against strict patterns on load, so they are safe to write into CSS.
+func (s *server) colors(w http.ResponseWriter, r *http.Request) {
+	types, err := loadProjectTypes(s.cfg.Root)
+	if err != nil {
+		log.Printf("load project types: %v", err)
+	}
+	priorities, err := loadPriorityColors(s.cfg.Root)
+	if err != nil {
+		log.Printf("load priority colors: %v", err)
+		priorities = defaultPriorityColors
+	}
+
+	var b strings.Builder
+	for p := 1; p <= 5; p++ {
+		fmt.Fprintf(&b, ".p-%d { --pc: %s; }\n", p, priorities[strconv.Itoa(p)])
+	}
+	for _, t := range types {
+		fmt.Fprintf(&b, ".t-%s { --tc: %s; }\n", t.Name, t.Color)
+	}
+	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-cache")
+	io.WriteString(w, b.String())
 }
 
 func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
@@ -145,7 +187,7 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
-var configKeys = []string{"SPARK_DATA_DIR", "SPARK_ADDR", "SPARK_USERNAME", "SPARK_PASSWORD", "SPARK_MERGE"}
+var configKeys = []string{"SPARK_ROOT", "SPARK_ADDR", "SPARK_USERNAME", "SPARK_PASSWORD"}
 
 // loadConfig reads the env file if one is given, then lets environment
 // variables override it. Every setting is optional.
@@ -164,31 +206,25 @@ func loadConfig(path string) (config, error) {
 	}
 
 	cfg := config{
-		DataDir:  vals["SPARK_DATA_DIR"],
+		Root:     vals["SPARK_ROOT"],
 		Addr:     vals["SPARK_ADDR"],
 		Username: vals["SPARK_USERNAME"],
 		Password: vals["SPARK_PASSWORD"],
-		Merge:    map[string]bool{},
 	}
 	if cfg.Addr == "" {
 		cfg.Addr = "127.0.0.1:8080"
 	}
-	if cfg.DataDir == "" {
-		// Default to a projects folder next to the binary, where the
-		// collector writes by default too.
+	if cfg.Root == "" {
+		// Default to the folder the binary sits in, the same rule the
+		// collector uses.
 		exe, err := os.Executable()
 		if err != nil {
-			return config{}, fmt.Errorf("SPARK_DATA_DIR is not set and the binary location is unknown: %w", err)
+			return config{}, fmt.Errorf("SPARK_ROOT is not set and the binary location is unknown: %w", err)
 		}
-		cfg.DataDir = filepath.Join(filepath.Dir(exe), "projects")
+		cfg.Root = filepath.Dir(exe)
 	}
 	if (cfg.Username == "") != (cfg.Password == "") {
 		return config{}, errors.New("set both SPARK_USERNAME and SPARK_PASSWORD, or neither")
-	}
-	for _, name := range strings.Split(vals["SPARK_MERGE"], ",") {
-		if name = strings.TrimSpace(name); name != "" {
-			cfg.Merge[strings.ToLower(name)] = true
-		}
 	}
 	return cfg, nil
 }

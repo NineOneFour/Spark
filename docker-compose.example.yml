@@ -1,17 +1,14 @@
-# Example: copy to docker-compose.yml and change the paths and login.
+# Example: copy to docker-compose.yml, change the path, user and login, then
+# run `docker compose up -d`. Create the SparkRoot folder first.
 services:
   spark:
-    build: .
+    image: spark                 # or build: . from a checkout
+    user: "1000:1000"            # your `id -u`:`id -g`, so files stay yours
     ports:
-      - "127.0.0.1:8080:8080"   # drop 127.0.0.1: to reach it from other machines
-    environment:
-      SPARK_USERNAME: terry      # remove both lines to turn login off
-      SPARK_PASSWORD: change-me
-      # SPARK_MERGE: spark,collaborator
-      # COLLECT_INTERVAL: 900    # seconds between collector runs
+      - "127.0.0.1:8080:8080"    # keep 127.0.0.1 unless login is on
+    environment: {}
+      # SPARK_USERNAME: me       # set both to turn login on
+      # SPARK_PASSWORD: change-me
     volumes:
-      - ./spark-data:/projects   # where snapshots are kept
-      # Source folders to scan. Mount each one under /sources, read-only.
-      - ~/Projects:/sources/Projects:ro
-      # - ~/work:/sources/work:ro
+      - ~/Documents/Spark:/spark # SparkRoot
     restart: unless-stopped

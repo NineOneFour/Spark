@@ -3,235 +3,102 @@
 Spark has three pieces:
 
 - **The skill** writes `spark.md` in a project when you say `Spark, go`.
-- **The collector** finds `spark.md` files in your source folders and copies them to one place, as `<machine-id>__<folder>.md`.
-- **The web app** shows what the collector copied.
+- **The collector** (`collector.py`) finds `spark.md` files in your scan roots and copies them into SparkRoot.
+- **The web app** shows them as cards, and has a settings page.
 
-Pick one of three ways to run the collector and web app:
+Everything ships in one Docker image. The container owns one host folder, **SparkRoot** (for example `~/Documents/Spark`), and fills it on start:
 
-| Route | Use it when | Transport |
-|---|---|---|
-| [Localhost](#localhost) | Everything is on one machine | Collector copies into a local folder |
-| [Docker](#docker) | You want it in a container | Same, inside the container |
-| [Central server](#central-server) | Projects live on several machines | Collectors upload to a Samba share |
-
-The examples below are starting points. Adjust paths, users, and addresses to fit your setup.
-
-## Install the skill
-
-Needed for every route.
-
-```sh
-git clone git@github.com:NineOneFour/Spark.git
-ln -s "$PWD/Spark/skill" ~/.claude/skills/spark
+```text
+SparkRoot/
+  collector.py   the collector; run on the host by cron
+  setup.sh       one-time host setup
+  INSTALL.md     this file
+  Skill/         the Spark skill
+  Config/        settings (scan roots, project types, priority colors)
+  Projects/      snapshots, named projectName__projectType.md
 ```
 
-## Build
+## 1. Start the container
 
-Needed for localhost and the central server. Docker builds for you.
-
-Requires Go 1.23 or newer.
+Create SparkRoot first. If Docker creates it, root owns it and the container can't write to it.
 
 ```sh
-cd Spark
-(cd collector && go build -o collector .)
-(cd web && go build -o web .)
-```
-
-Both are static binaries with no runtime dependencies. To build for another machine, set `GOOS` and `GOARCH`. For example, use `GOOS=linux GOARCH=arm64` for a Raspberry Pi.
-
-## Configuration
-
-Both binaries read settings from environment variables. They can also read an env file (`-config path`), and environment variables win over the file. Commented examples: [`collector/collector.env.example`](collector/collector.env.example) and [`web/web.env.example`](web/web.env.example).
-
-| Collector | Default | |
-|---|---|---|
-| `SCAN_ROOT` | required | Folders to scan, comma-separated |
-| `MACHINE_ID` | `local` | Prefix on every file. Must be unique per machine and must not contain `__` |
-| `TARGET_DIR` | `projects/` next to the binary | Local folder to copy into |
-| `SMB_HOST`, `SMB_SHARE`, `SMB_USER`, `SMB_PASSWORD` | unset | Upload to a Samba share instead. Setting `SMB_HOST` switches to this |
-
-| Web app | Default | |
-|---|---|---|
-| `SPARK_DATA_DIR` | `projects/` next to the binary | Folder to read |
-| `SPARK_ADDR` | `127.0.0.1:8080` | Listen address |
-| `SPARK_USERNAME`, `SPARK_PASSWORD` | unset | Set both to require login. Leave both unset for no login |
-| `SPARK_MERGE` | unset | Folder names to merge across machines, comma-separated. The newest snapshot wins |
-
-**Collector deletions:** the collector removes files with its own `MACHINE_ID` prefix that it did not find on this run, so deleted projects disappear. If a run finds nothing at all, it deletes nothing, since that usually means a wrong `SCAN_ROOT`.
-
-**Login:** it is off unless you set a username and password. Turn it on for anything reachable from the Internet.
-
-## Localhost
-
-The collector and web app share a `projects/` folder next to the binaries, so no configuration is needed beyond where your projects live.
-
-```sh
-mkdir -p ~/spark
-cp collector/collector web/web ~/spark/
-
-SCAN_ROOT=~/code,~/work ~/spark/collector   # copies into ~/spark/projects
-~/spark/web                                 # http://localhost:8080
-```
-
-To run the collector every 15 minutes, install the systemd user timer. Your settings go in `~/.config/spark/collector.env`.
-
-```sh
-install -Dm755 ~/spark/collector ~/.local/bin/spark-collector
-install -Dm644 collector/systemd/spark-collector.{service,timer} -t ~/.config/systemd/user/
-mkdir -p ~/.config/spark
-printf 'SCAN_ROOT=~/code\nTARGET_DIR=~/spark/projects\n' > ~/.config/spark/collector.env
-systemctl --user daemon-reload
-systemctl --user enable --now spark-collector.timer
-```
-
-A user service for the web app works the same way. Or just run it when you want it.
-
-## Docker
-
-One container runs the web app, plus the collector every 15 minutes.
-
-- **Sources:** mount each folder you want scanned under `/sources`, read-only.
-- **Data:** mount a host folder at `/projects` to hold the snapshots.
-
-```sh
-mkdir -p ~/spark-data
-docker build -t spark .
+mkdir -p ~/Documents/Spark
 docker run -d --name spark \
   -p 127.0.0.1:8080:8080 \
   --user "$(id -u):$(id -g)" \
-  -v ~/spark-data:/projects \
-  -v ~/code:/sources/code:ro \
-  -v ~/work:/sources/work:ro \
-  -e SPARK_USERNAME=me -e SPARK_PASSWORD=change-me \
+  -v ~/Documents/Spark:/spark \
   --restart unless-stopped \
   spark
 ```
 
-- **`--user`:** keeps the snapshot files owned by you instead of root. Create the data folder first; if Docker creates it, it's owned by root and the collector can't write to it.
-- **`COLLECT_INTERVAL`:** sets the seconds between collector runs (default `900`). Set it to `0` to turn the collector off, for example when snapshots arrive another way.
-- **`-p`:** drop the `127.0.0.1:` to reach it from other machines.
+- **`--user`:** keeps every file in SparkRoot owned by you instead of root.
+- **`-p`:** keep `127.0.0.1:` unless login is on. Without login, anyone who can reach the page can change the settings.
+- **Compose:** copy [`docker-compose.example.yml`](docker-compose.example.yml) to `docker-compose.yml`, set the path and `user:`, and run `docker compose up -d`.
 
-For Compose, copy [`docker-compose.example.yml`](docker-compose.example.yml) to `docker-compose.yml`, edit the paths and login, and run `docker compose up -d`.
+The dashboard is at http://localhost:8080.
 
-## Central server
+## 2. Set up the host
 
-Use this when projects live on several machines. Each machine runs a collector that uploads over SMB to a small Linux server. The web app on that server reads the files, and Caddy puts it on the Internet.
-
-```text
-laptop ──┐
-desktop ─┼── SMB (LAN only) ──► /srv/spark/projects ──► web app ──► Caddy ──► you
-work ────┘
-```
-
-**Keep the paths separate.** The Samba account can write only to the data folder. The web app runs as its own account with read-only access. That way, a compromised web app can't change snapshots.
-
-### 1. Accounts and folder
-
-On Debian or Ubuntu, for example:
+The container never touches host folders outside SparkRoot, so two steps run on the host. Needs `python3`.
 
 ```sh
-useradd --system --no-create-home --shell /usr/sbin/nologin spark        # Samba writer
-useradd --system --no-create-home --shell /usr/sbin/nologin spark-web    # web app
-mkdir -p /srv/spark/projects
-chown spark:spark /srv/spark/projects
-chmod 755 /srv/spark/projects     # spark-web can read, not write
-smbpasswd -a spark
+~/Documents/Spark/setup.sh
 ```
 
-### 2. Samba
+It links `~/.claude/skills/spark` to `SparkRoot/Skill`, and adds a cron line that runs the collector every 15 minutes. The collector's last run is logged to `SparkRoot/collector.log`. Rerunning the script is safe.
 
-A share limited to your LAN. For example, in `/etc/samba/smb.conf`:
+## 3. Add scan roots
 
-```ini
-[global]
-   hosts allow = 192.168.1. 127.
-   hosts deny = ALL
-   server min protocol = SMB2
-
-[projects]
-   path = /srv/spark/projects
-   valid users = spark
-   read only = no
-   browseable = no
-   create mask = 0644
-```
-
-Also block port 445 from anywhere outside the LAN in the host firewall. Samba's own settings are not enough on their own.
-
-### 3. Web app
-
-Install the binary and config:
+Open **Settings** on the dashboard and add the folders to scan, such as `~/Projects`. Each path must start with `/` or `~/`, and `~` means your home folder on the host. The collector picks them up on its next run. To run it right away:
 
 ```sh
-install -Dm755 web/web /usr/local/bin/spark-web
-install -Dm640 -g spark-web web/web.env.example /etc/spark/web.env   # then edit it
+python3 ~/Documents/Spark/collector.py
 ```
 
-In `/etc/spark/web.env`, set at least:
+## 4. Use it
+
+In any project, tell your coding agent `Spark, go`. The skill writes `spark.md`, the collector copies it into `Projects/`, and the card appears.
+
+## Settings
+
+All settings are files in `SparkRoot/Config/`, edited on the settings page or by hand:
+
+| File | Holds |
+|---|---|
+| `scan_roots.json` | Folders the collector scans, for example `["~/Projects"]` |
+| `project_types.json` | Allowed project types, each with a card color, for example `[{"name": "side-project", "color": "#64748b"}]` |
+| `priority_colors.json` | Card color for each priority 1–5, for example `{"1": "#dc2626", ...}` |
+
+The web app creates any missing file with its defaults on start. A snapshot whose `project_type` isn't listed is hidden.
+
+| Container setting | Default | |
+|---|---|---|
+| `SPARK_USERNAME`, `SPARK_PASSWORD` | unset | Set both (`-e SPARK_USERNAME=me -e SPARK_PASSWORD=...`) to require login. Leave both unset for no login |
+| `SPARK_ADDR` | `:8080` | Listen address inside the container |
+| `SPARK_ROOT` | `/spark` | SparkRoot inside the container |
+
+## Updating
+
+Pull the new image and recreate the container. On every start it overwrites `collector.py`, `setup.sh`, `INSTALL.md` and `Skill/` with the image's copies, so don't edit those; customize through `Config/` instead. `Config/` and `Projects/` are never overwritten.
+
+## Removing a project
+
+Nothing is deleted automatically. Delete its file from `SparkRoot/Projects/` by hand. Renaming a project or changing its type leaves the old card until you delete the old file.
+
+Two projects with the same name and type would share a filename: the collector copies the first, skips the rest, and logs a warning in `collector.log`.
+
+## Without Docker
+
+Build the web app (Go 1.23 or newer) and point it at SparkRoot:
 
 ```sh
-SPARK_DATA_DIR=/srv/spark/projects
-SPARK_ADDR=127.0.0.1:8080          # or a LAN address if Caddy runs on another box
-SPARK_USERNAME=me
-SPARK_PASSWORD=a-long-password
+(cd web && go build -o web .)
+SPARK_ROOT=~/Documents/Spark ./web/web    # http://127.0.0.1:8080
 ```
 
-Then add a systemd service, for example `/etc/systemd/system/spark-web.service`:
+Then copy `collector/collector.py`, `setup.sh` and `skill/` (as `Skill/`) into SparkRoot yourself, and run `setup.sh`. Without `SPARK_ROOT`, the web app uses the folder its binary sits in. `web/web.env.example` lists the settings; pass the file with `-config`.
 
-```ini
-[Unit]
-Description=Spark web app
-After=network.target
+## Moving from an older Spark
 
-[Service]
-User=spark-web
-ExecStart=/usr/local/bin/spark-web -config /etc/spark/web.env
-Restart=on-failure
-NoNewPrivileges=yes
-ProtectSystem=strict
-ProtectHome=yes
-PrivateTmp=yes
-ReadOnlyPaths=/srv/spark/projects
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Start it:
-
-```sh
-systemctl daemon-reload
-systemctl enable --now spark-web
-```
-
-### 4. Caddy
-
-Point Caddy at the web app. Caddy handles HTTPS and sets `X-Forwarded-Proto`, which Spark uses to mark its login cookie secure.
-
-```caddyfile
-spark.example.com {
-    reverse_proxy 127.0.0.1:8080
-}
-```
-
-If Caddy runs on a different machine, point `reverse_proxy` at the Spark server's LAN address. Then firewall port 8080 so only Caddy can reach it.
-
-### 5. Collectors
-
-On each machine with projects, build the collector and set it up with the systemd user timer as in [Localhost](#localhost). Use SMB settings in `~/.config/spark/collector.env`:
-
-```sh
-MACHINE_ID=work-laptop
-SCAN_ROOT=~/Projects
-SMB_HOST=spark.lan
-SMB_SHARE=projects
-SMB_USER=spark
-SMB_PASSWORD=the-smbpasswd-password
-```
-
-Run it once by hand to check:
-
-```sh
-~/.local/bin/spark-collector
-journalctl --user -u spark-collector   # later runs
-```
+Older versions named snapshots `<machine-id>__<folder>.md` and used a systemd timer. Delete the old data folder, disable the old timer (`systemctl --user disable --now spark-collector.timer`), and let the collector refill `Projects/` from your `spark.md` files.
