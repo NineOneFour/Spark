@@ -43,7 +43,7 @@ last_updated: 2026-10-01
 **Date:** 2026-10-01
 **Status:** Active (built 2026-10-01)
 **Decision:** One image, run with `docker run` and SparkRoot mounted, carries the web app, the collector, the skill, `setup.sh` and `INSTALL.md`. On every start the entrypoint overwrites `collector.py`, `setup.sh`, `INSTALL.md` and `Skill/` in SparkRoot; `Config/` and `Projects/` are never overwritten. `setup.sh`, run once on the host from SparkRoot, creates the skill symlink and the cron line, because the container may not touch host folders outside SparkRoot. Login is `-e SPARK_USERNAME/SPARK_PASSWORD`.
-**Reasoning:** The user: someone runs the image and it holds everything needed, and it will be published to Docker Hub. Overwriting on start means pulling a new image updates the skill and collector.
+**Reasoning:** The user: someone runs the image and it holds everything needed, and it will be published to Docker Hub in a later phase. Overwriting on start means pulling a new image updates the skill and collector.
 **Alternatives considered:** A setup script that also writes a compose file and starts the container; copying the shipped files only when missing (edits survive, but old skills linger after an upgrade).
 **Consequences:** Local edits to `Skill/` or `collector.py` are lost on restart; customization goes through `Config/`. The image name in docs is a placeholder until published.
 

@@ -36,7 +36,7 @@ Then read this file fully before doing anything else in this session.
 
 **Not yet built:**
 - Phase 3: remote server connections (push/pull between SparkRoots); first question still open, see `phase2-plan.md` "Phase 3"
-- Publishing the image to Docker Hub (the user will do this; docs use the placeholder name `spark`)
+- Publishing the image to Docker Hub: a later phase, not soon. Until then, build it locally (`docker build -t spark .`); docs use the name `spark`
 - Automated tests and CI
 - Code-graph coverage: `.mex/graph.db` indexed 0 files at setup (Go), so the scaffold has no `grounds_to` entries
 

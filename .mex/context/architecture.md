@@ -99,7 +99,7 @@ revision: 1
 - **cron on the host**: runs the collector every 15 minutes (`setup.sh` adds the line).
 - **Caddy or another proxy (optional)**: its `X-Forwarded-Proto: https` makes the session cookie `Secure`.
 - **Google Fonts**: allowed by the CSP (`fonts.googleapis.com`, `fonts.gstatic.com`) for the stylesheet.
-- **Docker Hub (planned)**: the user will publish the image there.
+- **Docker Hub (later phase)**: the image will be published there eventually; for now it is built locally.
 
 <!-- mex:entity
 id: mx_01M3QT58W2GTCQXWEHM7T1T090
