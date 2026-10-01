@@ -16,7 +16,7 @@ edges:
     condition: when working on spark.md fields, sections, validation, or rendering
   - target: patterns/INDEX.md
     condition: when starting a task — check the pattern index for a matching pattern file
-last_updated: 2026-09-29
+last_updated: 2026-10-01
 ---
 
 # Session Bootstrap
@@ -34,6 +34,7 @@ Then read this file fully before doing anything else in this session.
 - Three deployment routes documented in `INSTALL.md`: localhost, Docker (one container, collector loop), central server (Samba + Caddy)
 
 **Not yet built:**
+- Phase 2 (container as the core, SparkRoot, host worker, settings page): planned in `phase2-plan.md`, decisions in `context/decisions.md`
 - Automated tests and CI
 - Code-graph coverage: `.mex/graph.db` indexed 0 files at setup (Go), so the scaffold has no `grounds_to` entries
 
