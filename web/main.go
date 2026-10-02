@@ -16,7 +16,10 @@ import (
 	"io"
 	"io/fs"
 	"log"
+	"mime"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -37,6 +40,10 @@ type config struct {
 	Mode     string // "local" or "remote"
 	Username string
 	Password string
+
+	URL            *url.URL       // SPARK_URL, the address people open; nil when unset
+	AllowNetwork   bool           // SPARK_ALLOW_NETWORK: a local answers to any host name
+	TrustedProxies []netip.Prefix // SPARK_TRUSTED_PROXIES
 }
 
 type server struct {
@@ -73,6 +80,9 @@ type mode interface {
 	pageData(data map[string]any)
 	// stateChanged is called after a priority or archive change.
 	stateChanged()
+	// hostAllowed reports whether to answer a request for this host name
+	// (lowercase, no port) when SPARK_URL is not set.
+	hostAllowed(host string) bool
 }
 
 func main() {
@@ -111,6 +121,8 @@ func main() {
 		log.Fatalf("settings: %v", err)
 	}
 
+	// Not in Go's built-in list, and the image has no /etc/mime.types.
+	mime.AddExtensionType(".woff2", "font/woff2")
 	static, _ := fs.Sub(staticFS, "static")
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
@@ -133,7 +145,7 @@ func main() {
 	// because failed logins wait in line behind each other.
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           securityHeaders(mux),
+		Handler:           s.edge(mux),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      2 * time.Minute,
@@ -235,17 +247,10 @@ func (s *server) colors(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, b.String())
 }
 
-func securityHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h := w.Header()
-		h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; frame-ancestors 'none'")
-		h.Set("X-Content-Type-Options", "nosniff")
-		h.Set("Referrer-Policy", "same-origin")
-		next.ServeHTTP(w, r)
-	})
+var configKeys = []string{
+	"SPARK_ROOT", "SPARK_ADDR", "SPARK_MODE", "SPARK_USERNAME", "SPARK_PASSWORD",
+	"SPARK_URL", "SPARK_ALLOW_NETWORK", "SPARK_TRUSTED_PROXIES",
 }
-
-var configKeys = []string{"SPARK_ROOT", "SPARK_ADDR", "SPARK_MODE", "SPARK_USERNAME", "SPARK_PASSWORD"}
 
 // loadConfig reads the env file if one is given, then lets environment
 // variables override it. Every setting is optional in local mode.
@@ -281,6 +286,20 @@ func loadConfig(path string) (config, error) {
 			return config{}, fmt.Errorf("SPARK_ROOT is not set and the binary location is unknown: %w", err)
 		}
 		cfg.Root = filepath.Dir(exe)
+	}
+	var err error
+	if v := strings.TrimSpace(vals["SPARK_URL"]); v != "" {
+		if cfg.URL, err = parseSparkURL(v); err != nil {
+			return config{}, err
+		}
+	}
+	if v := strings.TrimSpace(vals["SPARK_ALLOW_NETWORK"]); v != "" {
+		if cfg.AllowNetwork, err = strconv.ParseBool(v); err != nil {
+			return config{}, fmt.Errorf("SPARK_ALLOW_NETWORK %q: use true or false", v)
+		}
+	}
+	if cfg.TrustedProxies, err = parseTrustedProxies(vals["SPARK_TRUSTED_PROXIES"]); err != nil {
+		return config{}, err
 	}
 	if (cfg.Username == "") != (cfg.Password == "") {
 		return config{}, errors.New("set both SPARK_USERNAME and SPARK_PASSWORD, or neither")

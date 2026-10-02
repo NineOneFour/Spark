@@ -188,14 +188,14 @@ func (a *auth) sessionAccount(r *http.Request) *account {
 	return acct
 }
 
-// setSession marks the cookie Secure only over HTTPS (directly or via a proxy
-// such as Caddy); browsers drop Secure cookies on plain http to a LAN address.
-func (a *auth) setSession(w http.ResponseWriter, r *http.Request, acct *account) error {
+// setSession marks the cookie Secure only over HTTPS (see isHTTPS); browsers
+// drop Secure cookies on plain http to a LAN address.
+func (a *auth) setSession(w http.ResponseWriter, r *http.Request, acct *account, secure bool) error {
 	sess, _ := a.store.New(r, sessionCookie)
 	sess.Values["user"] = acct.Username
 	sess.Values["pw"] = passwordTag(acct)
 	opts := *a.store.Options
-	opts.Secure = r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https"
+	opts.Secure = secure
 	sess.Options = &opts
 	return sess.Save(r, w)
 }
@@ -276,7 +276,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if err := s.auth.setSession(w, r, acct); err != nil {
+	if err := s.auth.setSession(w, r, acct, s.isHTTPS(r)); err != nil {
 		log.Printf("save session: %v", err)
 		http.Error(w, "Could not log you in. Check the server log.", http.StatusInternalServerError)
 		return

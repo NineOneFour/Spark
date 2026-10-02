@@ -26,7 +26,7 @@ edges:
 # Entry shape: { node: "function:<tier-1-id>", fingerprint: "mh:64:<hex>" }
 # Graph indexed 0 files at setup (Go not indexed), so no grounding is possible yet.
 grounds_to: []
-last_updated: 2026-10-01
+last_updated: 2026-10-02
 mex:
   id: mx_01M3QT58XQC6BMQHGY0BXGY4WY
   type: architecture
@@ -86,7 +86,7 @@ revision: 1
 - **collector** (`collector/collector.py`): Python 3 stdlib script, run on the host by cron. `SPARK_ROOT` is the script's own folder. `scan`, `front_matter` (flat `key: value`), `camel_case`, `target_name`, atomic `put` (mkstemp + `os.replace`, mode 0644). Case-insensitive clash check: first path wins, rest logged. Exits 1 on a copy failure or a missing `scan_roots.json`.
 - **entrypoint** (`docker/entrypoint.sh`): refuses to start if `/spark` isn't writable, warns when run as root, overwrites the shipped files in SparkRoot (copy + rename), then `exec web`.
 - **setup.sh** (repo root, shipped into SparkRoot): host-only steps, idempotent. Symlinks both skills (`link_skill`; leaves a real folder alone), adds the cron line (`> collector.log`).
-- **web server** (`web/main.go`): `net/http` mux with Go 1.22 patterns (`GET /{$}`, `GET /p/{id}`, `GET /settings`, `POST /settings/*`, `/login`, public `GET /colors.css`), embedded templates/static, `securityHeaders` (CSP, nosniff).
+- **web server** (`web/main.go`): `net/http` mux with Go 1.22 patterns (`GET /{$}`, `GET /p/{id}`, `GET /settings`, `POST /settings/*`, `/login`, public `GET /colors.css`), embedded templates/static (fonts bundled in `static/fonts/`). Every request passes `s.edge` (`web/edge.go`): CSP (self only, `base-uri 'none'`, `form-action 'self'`), nosniff, HSTS when `SPARK_URL` is https, and the host check (only `SPARK_URL`'s host name; without it the mode decides: local only `localhost`/loopback unless `SPARK_ALLOW_NETWORK`, remote any). `clientIP` and `isHTTPS` believe proxy headers only from `SPARK_TRUSTED_PROXIES`.
 - **settings** (`web/settings.go`): `ensureSettings` creates `Projects/`, `Config/` and missing default files on start (`scan_roots.json` only on local, in `newLocalMode`); loaders validate entries (`typeNameRe`, `colorRe`) and log bad ones once; `writeJSON` writes temp + rename.
 - **settings page** (`web/settings_page.go`): scan roots, project types, priority colors. `updateSettings` checks the post (`checkPost`: `Sec-Fetch-Site`/`Origin` + a form token: per account with login on, an HMAC of username and password tag under the session key; per process with login off; `csrfToken`), serializes writes under `settingsMu`, and edits the file as written so invalid hand entries survive.
 - **mode boundary** (`web/main.go`): `mode` interface (`routes`, `fileKey`, `acceptsType`, `canEdit`, `canEditSettings`, `settingsData`, `stateChanged`), implemented by `localMode` (`local.go`) and `remoteMode` (`remote.go`). Shared routes: `/`, `/p/{key}`, `POST /p/{key}/state`, `/settings`, types, colors, login.
@@ -105,8 +105,7 @@ revision: 1
 ## External Dependencies
 - **SparkRoot** (bind mount, for example `~/Documents/Spark:/spark`, run with `--user uid:gid`): the only storage. `Projects/` snapshots, `Config/` settings, plus the shipped files.
 - **cron on the host**: runs the collector every 15 minutes (`setup.sh` adds the line).
-- **Caddy or another proxy (optional)**: its `X-Forwarded-Proto: https` makes the session cookie `Secure`.
-- **Google Fonts**: allowed by the CSP (`fonts.googleapis.com`, `fonts.gstatic.com`) for the stylesheet.
+- **Caddy or another proxy (optional)**: listed in `SPARK_TRUSTED_PROXIES`, its `X-Forwarded-Proto: https` makes the session cookie `Secure` and its `X-Forwarded-For` gives the client address; `SPARK_URL` overrides the scheme.
 - **Docker Hub (later phase)**: the image will be published there eventually; for now it is built locally.
 
 <!-- mex:entity

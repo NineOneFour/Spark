@@ -25,9 +25,22 @@ func newLocalMode(s *server) (*localMode, error) {
 	if err := ensureFiles(s.cfg.Root, map[string]any{scanRootsFile: []string{}}); err != nil {
 		return nil, err
 	}
+	if s.cfg.AllowNetwork && s.cfg.URL == nil {
+		if s.auth == nil {
+			log.Printf("SPARK_ALLOW_NETWORK is on and login is off: anyone who can reach %s can read every snapshot and change the settings, including where snapshots are pushed. Turn login on", s.cfg.Addr)
+		} else {
+			log.Printf("SPARK_ALLOW_NETWORK is on: answering to any host name, not only localhost")
+		}
+	}
 	l := &localMode{s: s, kick: make(chan struct{}, 1)}
 	go l.syncLoop()
 	return l, nil
+}
+
+// hostAllowed: a local answers only to localhost unless SPARK_ALLOW_NETWORK
+// is on, so a website can't reach it through the visitor's browser.
+func (l *localMode) hostAllowed(host string) bool {
+	return l.s.cfg.AllowNetwork || isLocalhost(host)
 }
 
 func (l *localMode) routes(mux *http.ServeMux) {

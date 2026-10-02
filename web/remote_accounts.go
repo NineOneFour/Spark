@@ -74,7 +74,7 @@ func (m *remoteMode) changeInvites(w http.ResponseWriter, r *http.Request) {
 	case action == "create":
 		s.renderSettings(w, r, http.StatusOK, "", map[string]any{
 			"InviteFor":  username,
-			"InviteLink": externalURL(r) + "/invite/" + token,
+			"InviteLink": m.s.externalURL(r) + "/invite/" + token,
 		})
 	default:
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
@@ -325,7 +325,7 @@ func (m *remoteMode) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil {
-		err = m.s.auth.setSession(w, r, acct)
+		err = m.s.auth.setSession(w, r, acct, m.s.isHTTPS(r))
 	}
 	if err != nil {
 		log.Printf("accept invite: %v", err)

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strings"
 )
 
 // remoteMode is a hosted, multi-user deployment. Local deployments push
@@ -18,7 +17,16 @@ type remoteMode struct {
 	s *server
 }
 
-func newRemoteMode(s *server) *remoteMode { return &remoteMode{s: s} }
+func newRemoteMode(s *server) *remoteMode {
+	if s.cfg.URL == nil {
+		log.Printf("SPARK_URL is not set: any host name is accepted, and invite links and the cross-site check follow the request's Host header. Set it before exposing this remote to the Internet")
+	}
+	return &remoteMode{s: s}
+}
+
+// hostAllowed: a remote is meant to be reached over the network, so without
+// SPARK_URL it answers to any host name.
+func (m *remoteMode) hostAllowed(string) bool { return true }
 
 func (m *remoteMode) routes(mux *http.ServeMux) {
 	s := m.s
@@ -99,14 +107,4 @@ func (m *remoteMode) acceptAll() bool {
 func (m *remoteMode) changeAcceptTypes(r *http.Request) error {
 	rs := remoteSettings{AcceptAllTypes: r.PostFormValue("all") == "on"}
 	return writeJSON(filepath.Join(configDir(m.s.cfg.Root), remoteSettingsFile), rs)
-}
-
-// externalURL is this remote's address as the browser sees it, for invite
-// links.
-func externalURL(r *http.Request) string {
-	scheme := "http"
-	if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-	return scheme + "://" + strings.TrimSuffix(r.Host, "/")
 }

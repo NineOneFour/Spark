@@ -84,6 +84,9 @@ Web (env file only via `-config`; env vars win; all optional):
 - `SPARK_ROOT`: default the folder the binary sits in; `/spark` in the image
 - `SPARK_ADDR`: default `127.0.0.1:8080`; `:8080` in the image
 - `SPARK_USERNAME` + `SPARK_PASSWORD`: set both or neither; neither means login off
+- `SPARK_URL`: optional; when set, the only host name accepted, and the source of invite links, the Origin check, the Secure flag and HSTS. A remote warns at start without it
+- `SPARK_ALLOW_NETWORK`: local only, default `false` (answers only to `localhost`, `127.0.0.1`, `[::1]`); warns at start when on
+- `SPARK_TRUSTED_PROXIES`: addresses/ranges whose `X-Forwarded-For`/`-Proto` are believed (`web/edge.go`); default none
 
 Deployment settings (JSON in `SparkRoot/Config/`, created with defaults by the web app): `scan_roots.json`, `project_types.json`, `priority_colors.json`. See `INSTALL.md` "Settings".
 

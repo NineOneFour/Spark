@@ -16,7 +16,7 @@ edges:
     condition: when working on spark.md fields, sections, validation, or rendering
   - target: patterns/INDEX.md
     condition: when starting a task — check the pattern index for a matching pattern file
-last_updated: 2026-10-01
+last_updated: 2026-10-02
 ---
 
 # Session Bootstrap
@@ -39,7 +39,7 @@ Then read this file fully before doing anything else in this session.
 - `setup.sh` (host): skill symlink and cron line. `INSTALL.md` documents the Docker route plus a short no-Docker route
 
 **Not yet built:**
-- Phase 5 (`phase5-plan.md`): hardening against OWASP Top 10:2025 and the API Security Top 10; designed 2026-10-01 (18 locked decisions, 6 steps), not built. It covers the parse-limit leftover (file and project caps)
+- Phase 5 (`phase5-plan.md`): hardening against OWASP Top 10:2025 and the API Security Top 10; designed 2026-10-01 (18 locked decisions, 6 steps). Steps 1–2 built 2026-10-02 (Go 1.27.1/Alpine 3.24.2; `web/edge.go`: `SPARK_URL`, host check, `SPARK_ALLOW_NETWORK`, `SPARK_TRUSTED_PROXIES`, CSP/HSTS, bundled fonts); steps 3–6 not built. It covers the parse-limit leftover (file and project caps)
 - Phase 3 leftovers (`phase4-plan.md`): CI (deferred past phase 5), unit tests
 - Publishing the image to Docker Hub: a later phase, not soon. Until then, build it locally (`docker build -t spark .`); docs use the name `spark`
 - CI, and unit tests beyond `web/render_test.go` (end-to-end tests exist: `web/e2e/run.sh`, on demand only)

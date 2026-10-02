@@ -35,6 +35,7 @@ docker run -d --name spark \
 
 - **`--user`:** keeps every file in SparkRoot owned by you instead of root.
 - **`-p`:** keep `127.0.0.1:` unless login is on. Without login, anyone who can reach the page can change the settings.
+- **Other machines:** a local answers only at `localhost` (or `127.0.0.1`). To open it by another name or address, set `-e SPARK_ALLOW_NETWORK=true`, and turn login on.
 - **Compose:** copy [`docker-compose.example.yml`](docker-compose.example.yml) to `docker-compose.yml`, set the path and `user:`, and run `docker compose up -d`.
 
 The dashboard is at http://localhost:8080.
@@ -77,11 +78,13 @@ docker run -d --name spark-remote \
   --user "$(id -u):$(id -g)" \
   -v /srv/spark:/spark \
   -e SPARK_MODE=remote -e SPARK_USERNAME=admin -e SPARK_PASSWORD=... \
+  -e SPARK_URL=https://spark.example.com \
+  -e SPARK_TRUSTED_PROXIES=172.17.0.1 \
   --restart unless-stopped \
   spark
 ```
 
-Put it behind HTTPS (for example Caddy). Then:
+Put it behind HTTPS (for example Caddy). `SPARK_URL` is the address people open; Spark then refuses any other host name and builds invite links from it. `SPARK_TRUSTED_PROXIES` is your proxy's address as Spark sees it (`172.17.0.1` for a proxy on the Docker host); if it's wrong, the log names the address it saw (`security: ignoring proxy headers from ...`). Then:
 
 1. **Admin:** under **Settings**, pick the project types the remote accepts (or accept all), and under **People** create an invite link for each person. Send the link yourself; it works once, for 7 days. **Remove** next to a person ends their login and API keys. The projects they pushed stay, renamed to `deleted-<name>` (so the username can be invited again and start clean), and are archived 30 days later. Usernames starting with `deleted-` are kept for this.
 2. **Each person:** open the link, set a password, then under **Account** create an API key for each machine. A key is shown once.
@@ -113,6 +116,9 @@ The web app creates any missing file with its defaults on start. A snapshot whos
 | `SPARK_MODE` | `local` | `remote` for a team server (see [Sharing with a team](#sharing-with-a-team)) |
 | `SPARK_USERNAME`, `SPARK_PASSWORD` | unset | Set both (`-e SPARK_USERNAME=me -e SPARK_PASSWORD=...`) to require login. Leave both unset for no login. Required on remote, where this is the admin; the username uses lowercase letters, digits and hyphens |
 | `SPARK_ADDR` | `:8080` | Listen address inside the container |
+| `SPARK_URL` | unset | The address people open, like `https://spark.example.com`. Strongly recommended on a remote that faces the Internet. When set, Spark answers only to that host name, and invite links, the cross-site check, the Secure cookie flag and HSTS (for `https`) come from it |
+| `SPARK_ALLOW_NETWORK` | `false` | Local only. `true` lets a local answer to any host name, not just `localhost`, `127.0.0.1` and `[::1]`. Turn login on as well |
+| `SPARK_TRUSTED_PROXIES` | unset | Addresses or ranges of your HTTPS proxy, separated by commas, like `172.17.0.1` or `172.16.0.0/12`. Spark believes `X-Forwarded-For` and `X-Forwarded-Proto` only from these |
 | `SPARK_ROOT` | `/spark` | SparkRoot inside the container |
 
 ## Updating

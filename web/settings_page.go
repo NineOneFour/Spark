@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"net/url"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -34,11 +33,8 @@ func (s *server) checkPost(r *http.Request) bool {
 	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
 		return false
 	}
-	if origin := r.Header.Get("Origin"); origin != "" {
-		u, err := url.Parse(origin)
-		if err != nil || u.Host != r.Host {
-			return false
-		}
+	if origin := r.Header.Get("Origin"); origin != "" && !s.sameOrigin(r, origin) {
+		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(r.PostFormValue("csrf")), []byte(s.csrfToken(viewer(r)))) == 1
 }

@@ -1,6 +1,6 @@
 # Phase 5 Plan: Hardening
 
-Status: designed 2026-10-01 (decisions below); step 1 built 2026-10-02.
+Status: designed 2026-10-01 (decisions below); steps 1–2 built 2026-10-02.
 Decisions are also in `.mex/context/decisions.md`, under "Phase 5".
 
 ## What phase 5 is
@@ -108,7 +108,7 @@ form tokens, bcrypt, hashed keys and invites, server timeouts, per-user API scop
 
 1. **Toolchain** (built 2026-10-02: Go 1.27.1, Alpine 3.24.2): Go, Alpine and dependencies current; `go.mod`, `Dockerfile`, the
    e2e runner and the docs' Go version; `govulncheck` clean.
-2. **Settings and the edge** (about half a day): the new env settings and startup warnings;
+2. **Settings and the edge** (built 2026-10-02, `web/edge.go`): the new env settings and startup warnings;
    `SPARK_URL`, the host check, `SPARK_ALLOW_NETWORK`; trusted proxies and the client IP; CSP,
    HSTS, bundled fonts.
 3. **Login** (about half a day): the penalty schedule and `Config/lockouts.json`, the `web unlock`
