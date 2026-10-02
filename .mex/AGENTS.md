@@ -1,7 +1,7 @@
 ---
 name: agents
 description: Always-loaded project anchor. Read this first. Contains project identity, non-negotiables, commands, and pointer to ROUTER.md for full context.
-last_updated: 2026-10-01
+last_updated: 2026-10-02
 ---
 
 # Spark
@@ -22,10 +22,10 @@ A project-memory dashboard: an agent skill writes `spark.md` snapshots, a Python
 - Snapshot content is untrusted: keep goldmark's default HTML escaping, bluemonday on every render, and the CSP header
 
 ## Commands
-One Go module (`web/`, Go 1.23+) and one Python script (`collector/collector.py`, stdlib); one Go unit test file (`web/render_test.go`):
+One Go module (`web/`, Go 1.27+) and one Python script (`collector/collector.py`, stdlib); one Go unit test file (`web/render_test.go`):
 - Build web: `(cd web && go build -o web .)`
 - Check: `go vet ./...`, `gofmt -l .` and `go test ./...` in `web/`; `python3 -m py_compile collector/collector.py`
-- No local Go? Run them in `golang:1.23` with `docker run --rm -u $(id -u):$(id -g) -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/gopath -v "$PWD/web":/src -w /src golang:1.23 ...`
+- No local Go? Run them in `golang:1.27.1` with `docker run --rm -u $(id -u):$(id -g) -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/gopath -v "$PWD/web":/src -w /src golang:1.27.1 ...`
 - End-to-end, only when the user asks: `web/e2e/run.sh` (processes) and `web/e2e/run.sh -docker` (image); see `patterns/run-e2e.md`
 - Run locally: `SPARK_ROOT=<scratch> ./web/web`, copy `collector/collector.py` into that SparkRoot, run it
 - Docker: `docker build -t spark .` then `docker run --user "$(id -u):$(id -g)" -v <SparkRoot>:/spark -p 127.0.0.1:8080:8080 spark`

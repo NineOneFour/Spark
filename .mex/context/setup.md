@@ -21,7 +21,7 @@ edges:
   - target: patterns/debug-missing-card.md
     condition: when setup runs but cards do not appear
 grounds_to: []
-last_updated: 2026-10-01
+last_updated: 2026-10-02
 mex:
   id: mx_01M3QT5915NN48SVYHK9KSXFTW
   type: guide
@@ -51,10 +51,10 @@ status: promoted
 revision: 1
 -->
 ## Prerequisites
-- Docker (the normal route), or Go 1.23+ to build the web app yourself
+- Docker (the normal route), or Go 1.27+ to build the web app yourself
 - `python3` on the host (the collector, stdlib only) and `crontab` (or another scheduler)
 - A coding agent that loads skills from `~/.claude/skills/` (for the skills)
-- Development: Go is not required locally; `docker run --rm -u $(id -u):$(id -g) -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/gopath -v "$PWD":/src -w /src golang:1.23 go vet ./...` in `web/` works without it
+- Development: Go is not required locally; `docker run --rm -u $(id -u):$(id -g) -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/gopath -v "$PWD":/src -w /src golang:1.27.1 go vet ./...` in `web/` works without it
 
 <!-- mex:entity
 id: mx_01M3QT590QTQQMEA6608V4TFA1

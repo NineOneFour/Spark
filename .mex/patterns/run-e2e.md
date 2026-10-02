@@ -12,7 +12,7 @@ edges:
   - target: context/conventions.md
     condition: for the verify checklist
 grounds_to: []
-last_updated: 2026-10-01
+last_updated: 2026-10-02
 ---
 
 # Run the End-to-End Tests
@@ -28,7 +28,7 @@ Sync is triggered by real actions, not a test-only setting: adding or changing a
 3. To add a scenario: write a `Test…` in `web/e2e/scenarios_test.go` using `startSpark`/`startRemote`, `join` (invite + API key), `collect` (spark.md + collector run), `addRemote`, `newTeam`, and `waitFor` for anything done in the background.
 
 ## Gotchas
-- `run.sh` builds in `golang:1.23` and then runs the compiled test binary on the host, from `web/e2e/`, because the tests find `../../collector/collector.py` from there. The host needs Docker and `python3`; Go is not needed.
+- `run.sh` builds in `golang:1.27.1` and then runs the compiled test binary on the host, from `web/e2e/`, because the tests find `../../collector/collector.py` from there. The host needs Docker and `python3`; Go is not needed.
 - Builds and the Go module cache live in `.e2e/` at the repo root (gitignored and dockerignored).
 - Each test removes the processes and containers it started. After an interrupted run, check `docker ps -a --filter name=spark-e2e` and `docker network ls --filter name=spark-e2e`. Those are leftovers of the suite, but tell the user before removing them.
 - A failing test prints the logs of every Spark it started.

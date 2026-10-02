@@ -5,7 +5,7 @@
 #   web/e2e/run.sh -docker             each Spark is a container from the image
 #   web/e2e/run.sh -test.run TestPushAndPull    (go test flags go last)
 #
-# Go builds in the golang:1.23 container, so the host needs only Docker and
+# Go builds in the golang:1.27.1 container, so the host needs only Docker and
 # python3 (for the collector). Builds and the Go cache go in .e2e/ at the
 # repo root; the image is tagged spark:e2e, so it never replaces spark.
 set -eu
@@ -25,7 +25,7 @@ fi
 docker run --rm -u "$(id -u):$(id -g)" \
   -e GOCACHE=/cache/build -e GOPATH=/cache/path -e CGO_ENABLED=0 \
   -v "$WEB":/src -v "$OUT/go":/cache -v "$OUT/bin":/out -w /src \
-  golang:1.23 sh -c 'go vet -tags e2e ./... && go build -o /out/web . && go test -c -tags e2e -o /out/e2e.test ./e2e'
+  golang:1.27.1 sh -c 'go vet -tags e2e ./... && go build -o /out/web . && go test -c -tags e2e -o /out/e2e.test ./e2e'
 
 if [ -n "$use_docker" ]; then
   docker build -q -t spark:e2e "$REPO" >/dev/null

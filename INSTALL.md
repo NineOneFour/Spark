@@ -127,7 +127,7 @@ Two projects with the same name and type would share a filename: the collector c
 
 ## Without Docker
 
-Build the web app (Go 1.23 or newer) and point it at SparkRoot:
+Build the web app (Go 1.27 or newer) and point it at SparkRoot:
 
 ```sh
 (cd web && go build -o web .)

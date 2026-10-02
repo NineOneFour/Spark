@@ -16,19 +16,19 @@ edges:
     condition: when installing the toolchain or building binaries
 # Broad inventory: ground only claims embodied by a small number of symbols.
 grounds_to: []
-last_updated: 2026-10-01
+last_updated: 2026-10-02
 ---
 
 # Stack
 
 ## Core Technologies
-- **Go 1.23**: the web app; `CGO_ENABLED=0` static build in Docker. Cross-compile with `GOOS`/`GOARCH` (for example, Raspberry Pi arm64).
+- **Go 1.27**: the web app; `CGO_ENABLED=0` static build in Docker. Cross-compile with `GOOS`/`GOARCH` (for example, Raspberry Pi arm64).
 - **Python 3, standard library only**: the collector (`collector/collector.py`), run on the host. No pip, no PyYAML.
 - **Go standard library `net/http`** — routing via Go 1.22+ method/wildcard patterns (`GET /p/{id}`, `r.PathValue`). No router framework.
 - **`html/template` + `embed`** — server-rendered pages; templates and static files compiled into the binary.
 - **Plain CSS** (`web/static/style.css`) — no build step, no JS framework.
 - **Markdown skill files** — the agent-side generator; no code.
-- **Docker (alpine 3.20)**: the one image that holds everything; **cron** on the host schedules the collector.
+- **Docker (Alpine 3.24, base images pinned by version tag)**: the one image that holds everything; **cron** on the host schedules the collector.
 - **POSIX sh**: `docker/entrypoint.sh` and `setup.sh`.
 
 ## Key Libraries
@@ -36,7 +36,7 @@ last_updated: 2026-10-01
 - **gopkg.in/yaml.v3** (web) — front matter parsing into the `frontMatter` struct.
 - **github.com/microcosm-cc/bluemonday** (web) — sanitizes goldmark output on every render (`UGCPolicy`, narrowed).
 - **github.com/gorilla/sessions** (web) — signed login cookie.
-- **golang.org/x/crypto/bcrypt** (web) — password hashes. Pinned to v0.36.0: newer versions need a newer Go than the 1.23 build image.
+- **golang.org/x/crypto/bcrypt** (web) — password hashes. Kept current; `govulncheck` is clean.
 
 ## What We Deliberately Do NOT Use
 - No database or ORM: Markdown files in `SparkRoot/Projects/` and JSON in `Config/` are the store.
@@ -45,5 +45,5 @@ last_updated: 2026-10-01
 - No server-side session store: sessions are signed cookies (gorilla/sessions `CookieStore`).
 
 ## Version Constraints
-- Go 1.22+ is required for the `http.ServeMux` patterns; `go.mod` pins `go 1.23`, which matches the Docker `golang:1.23-alpine` build image.
+- Go 1.22+ is required for the `http.ServeMux` patterns; `go.mod` pins `go 1.27.0`, which matches the Docker `golang:1.27.1-alpine3.24` build image.
 - `http.FileServerFS` (used for static) requires Go 1.22+.
