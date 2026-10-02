@@ -26,6 +26,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 //go:embed templates/*.html
@@ -44,7 +45,20 @@ type config struct {
 	URL            *url.URL       // SPARK_URL, the address people open; nil when unset
 	AllowNetwork   bool           // SPARK_ALLOW_NETWORK: a local answers to any host name
 	TrustedProxies []netip.Prefix // SPARK_TRUSTED_PROXIES
+
+	PenaltyStart int // SPARK_PENALTY_START: failures that wait 2 s before the waits grow
+	LockoutAfter int // the failure that locks (SPARK_LOCKOUT_AFTER); 0 = never
+	MinPassword  int // SPARK_MIN_PASSWORD_LENGTH, in characters
 }
+
+// Defaults for the settings that can be loosened, so startup can warn when
+// one is.
+const (
+	defaultPenaltyStart = 4
+	defaultMinPassword  = 15
+	// maxPasswordBytes is bcrypt's limit; it ignores anything longer.
+	maxPasswordBytes = 72
+)
 
 type server struct {
 	cfg  config
@@ -93,21 +107,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
-
-	funcs := template.FuncMap{
-		"date":         func(t time.Time) string { return t.Format("Jan 2, 2006") },
-		"priorityName": func(p string) string { return priorityNames[p] },
+	if args := flag.Args(); len(args) > 0 {
+		os.Exit(runCommand(cfg, args))
 	}
-	tmpl := map[string]*template.Template{}
-	for _, page := range []string{"index", "project", "login", "settings", "account", "invite"} {
-		tmpl[page] = template.Must(template.New("").Funcs(funcs).ParseFS(templateFS, "templates/base.html", "templates/"+page+".html"))
-	}
+	cfg.warnLoosened()
 
 	if err := ensureSettings(cfg.Root); err != nil {
 		log.Fatalf("settings: %v", err)
 	}
 
-	s := &server{cfg: cfg, tmpl: tmpl, csrf: newCSRFToken()}
+	s := &server{cfg: cfg, tmpl: parseTemplates(), csrf: newCSRFToken()}
 	if cfg.Username != "" {
 		if s.auth, err = newAuth(cfg.Root, cfg.Username, cfg.Password); err != nil {
 			log.Fatalf("login: %v", err)
@@ -142,7 +151,7 @@ func main() {
 	log.Printf("listening on %s in %s mode, SparkRoot is %s", cfg.Addr, cfg.Mode, cfg.Root)
 	// A remote faces the Internet, so a client that opens connections and
 	// sends nothing must not hold them forever. Writes get longer than reads
-	// because failed logins wait in line behind each other.
+	// because a login can wait for a free password check.
 	srv := &http.Server{
 		Addr:              cfg.Addr,
 		Handler:           s.edge(mux),
@@ -154,11 +163,24 @@ func main() {
 	log.Fatal(srv.ListenAndServe())
 }
 
+func parseTemplates() map[string]*template.Template {
+	funcs := template.FuncMap{
+		"date":         func(t time.Time) string { return t.Format("Jan 2, 2006") },
+		"priorityName": func(p string) string { return priorityNames[p] },
+	}
+	tmpl := map[string]*template.Template{}
+	for _, page := range []string{"index", "project", "login", "settings", "account", "invite"} {
+		tmpl[page] = template.Must(template.New("").Funcs(funcs).ParseFS(templateFS, "templates/base.html", "templates/"+page+".html"))
+	}
+	return tmpl
+}
+
 // render adds what every page needs (the viewer, for the header) to data.
 // It takes the status so headers are set before they are sent.
 func (s *server) render(w http.ResponseWriter, r *http.Request, status int, page string, data map[string]any) {
 	data["Viewer"] = viewer(r)
 	data["CSRF"] = s.csrfToken(viewer(r)) // also used by the log out button in the header
+	data["MinPassword"] = s.cfg.MinPassword
 	s.mode.pageData(data)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
@@ -250,6 +272,7 @@ func (s *server) colors(w http.ResponseWriter, r *http.Request) {
 var configKeys = []string{
 	"SPARK_ROOT", "SPARK_ADDR", "SPARK_MODE", "SPARK_USERNAME", "SPARK_PASSWORD",
 	"SPARK_URL", "SPARK_ALLOW_NETWORK", "SPARK_TRUSTED_PROXIES",
+	"SPARK_PENALTY_START", "SPARK_LOCKOUT_AFTER", "SPARK_LOCKOUT", "SPARK_MIN_PASSWORD_LENGTH",
 }
 
 // loadConfig reads the env file if one is given, then lets environment
@@ -301,8 +324,33 @@ func loadConfig(path string) (config, error) {
 	if cfg.TrustedProxies, err = parseTrustedProxies(vals["SPARK_TRUSTED_PROXIES"]); err != nil {
 		return config{}, err
 	}
+	if cfg.PenaltyStart, err = intSetting(vals, "SPARK_PENALTY_START", defaultPenaltyStart, 0, 1000); err != nil {
+		return config{}, err
+	}
+	lockoutDefault := 0
+	if cfg.PenaltyStart > 0 {
+		lockoutDefault = cfg.PenaltyStart + 7
+	}
+	if cfg.LockoutAfter, err = intSetting(vals, "SPARK_LOCKOUT_AFTER", lockoutDefault, 1, 1000); err != nil {
+		return config{}, err
+	}
+	switch v := strings.ToLower(strings.TrimSpace(vals["SPARK_LOCKOUT"])); v {
+	case "", "on", "true":
+	case "off", "false":
+		cfg.LockoutAfter = 0
+	default:
+		return config{}, fmt.Errorf("SPARK_LOCKOUT %q: use on or off", v)
+	}
+	if cfg.MinPassword, err = intSetting(vals, "SPARK_MIN_PASSWORD_LENGTH", defaultMinPassword, 1, maxPasswordBytes); err != nil {
+		return config{}, err
+	}
 	if (cfg.Username == "") != (cfg.Password == "") {
 		return config{}, errors.New("set both SPARK_USERNAME and SPARK_PASSWORD, or neither")
+	}
+	if cfg.Password != "" {
+		if msg := cfg.passwordProblem(cfg.Password); msg != "" {
+			return config{}, fmt.Errorf("SPARK_PASSWORD: %s (SPARK_MIN_PASSWORD_LENGTH sets the minimum)", msg)
+		}
 	}
 	switch cfg.Mode {
 	case "", "local":
@@ -323,6 +371,68 @@ func loadConfig(path string) (config, error) {
 		return config{}, fmt.Errorf("SPARK_MODE %q: use local or remote", cfg.Mode)
 	}
 	return cfg, nil
+}
+
+// intSetting reads a whole-number setting, def when unset.
+func intSetting(vals map[string]string, key string, def, lo, hi int) (int, error) {
+	v := strings.TrimSpace(vals[key])
+	if v == "" {
+		return def, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < lo || n > hi {
+		return 0, fmt.Errorf("%s %q: use a whole number from %d to %d", key, v, lo, hi)
+	}
+	return n, nil
+}
+
+// passwordProblem says what is wrong with a new password, or "".
+func (c config) passwordProblem(p string) string {
+	if utf8.RuneCountInString(p) < c.MinPassword {
+		return fmt.Sprintf("use at least %d characters", c.MinPassword)
+	}
+	if len(p) > maxPasswordBytes {
+		return fmt.Sprintf("use at most %d bytes (about %d letters)", maxPasswordBytes, maxPasswordBytes)
+	}
+	return ""
+}
+
+// warnLoosened logs each limit set looser than its default. Spark still
+// runs; the operator decides.
+func (c config) warnLoosened() {
+	if c.MinPassword < defaultMinPassword {
+		log.Printf("SPARK_MIN_PASSWORD_LENGTH is %d, below the recommended %d", c.MinPassword, defaultMinPassword)
+	}
+	if c.PenaltyStart > defaultPenaltyStart {
+		log.Printf("SPARK_PENALTY_START is %d: failed logins wait only 2 s for the first %d (recommended %d)", c.PenaltyStart, c.PenaltyStart, defaultPenaltyStart)
+	}
+	switch {
+	case c.LockoutAfter == 0:
+		log.Printf("lockout is off: failed logins only wait, and never lock an account")
+	case c.PenaltyStart > 0 && c.LockoutAfter > c.PenaltyStart+7:
+		log.Printf("SPARK_LOCKOUT_AFTER is %d: an account locks later than the recommended %d", c.LockoutAfter, c.PenaltyStart+7)
+	}
+}
+
+// runCommand runs a subcommand instead of the server, such as
+// `web unlock sam`, and returns the exit code.
+func runCommand(cfg config, args []string) int {
+	switch {
+	case args[0] == "unlock" && len(args) == 2:
+		ok, err := unlockAccount(cfg.Root, args[1])
+		switch {
+		case err != nil:
+			fmt.Fprintf(os.Stderr, "unlock: %v\n", err)
+			return 1
+		case !ok:
+			fmt.Printf("%s has no failed logins to clear\n", args[1])
+		default:
+			fmt.Printf("security: unlocked account=%q by=\"web unlock\"\n", args[1])
+		}
+		return 0
+	}
+	fmt.Fprintln(os.Stderr, "usage: web [-config file]              run the server\n       web [-config file] unlock <username>   clear an account's failed logins and lock")
+	return 2
 }
 
 func readEnvFile(path string) (map[string]string, error) {

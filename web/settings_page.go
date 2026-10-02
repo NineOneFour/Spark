@@ -30,13 +30,19 @@ func newCSRFToken() string {
 // checkPost rejects cross-site form posts: by the browser's Sec-Fetch-Site or
 // Origin header when present, and always by the form token.
 func (s *server) checkPost(r *http.Request) bool {
-	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
-		return false
-	}
-	if origin := r.Header.Get("Origin"); origin != "" && !s.sameOrigin(r, origin) {
+	if s.crossSite(r) {
 		return false
 	}
 	return subtle.ConstantTimeCompare([]byte(r.PostFormValue("csrf")), []byte(s.csrfToken(viewer(r)))) == 1
+}
+
+// crossSite reports a post the browser says came from another site.
+func (s *server) crossSite(r *http.Request) bool {
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+		return true
+	}
+	origin := r.Header.Get("Origin")
+	return origin != "" && !s.sameOrigin(r, origin)
 }
 
 // csrfToken is the form token for a viewer. With login on it is derived from

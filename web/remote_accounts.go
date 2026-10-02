@@ -21,9 +21,8 @@ import (
 // key on their account page for each local deployment.
 
 const (
-	inviteLength      = 7 * 24 * time.Hour
-	minPasswordLength = 8
-	maxKeyNameLength  = 40
+	inviteLength     = 7 * 24 * time.Hour
+	maxKeyNameLength = 40
 )
 
 // changeInvites creates an invite (and shows its link once) or revokes one.
@@ -72,11 +71,13 @@ func (m *remoteMode) changeInvites(w http.ResponseWriter, r *http.Request) {
 		log.Printf("save invites: %v", err)
 		s.renderSettings(w, r, http.StatusInternalServerError, "Could not save the invite. Check the server log.", nil)
 	case action == "create":
+		s.securityEvent(r, "invite created", username, "by", viewer(r).Username)
 		s.renderSettings(w, r, http.StatusOK, "", map[string]any{
 			"InviteFor":  username,
 			"InviteLink": m.s.externalURL(r) + "/invite/" + token,
 		})
 	default:
+		s.securityEvent(r, "invite revoked", username, "by", viewer(r).Username)
 		http.Redirect(w, r, "/settings", http.StatusSeeOther)
 	}
 }
@@ -102,6 +103,10 @@ func (m *remoteMode) changeAccounts(r *http.Request) error {
 	})
 	if err != nil || !removed {
 		return err
+	}
+	m.s.securityEvent(r, "account removed", username, "by", viewer(r).Username)
+	if err := m.s.auth.lock.forget(username); err != nil {
+		log.Printf("clear lockout of %s: %v", username, err)
 	}
 	return m.retire(username)
 }
@@ -246,8 +251,10 @@ func (m *remoteMode) changeKeys(w http.ResponseWriter, r *http.Request) {
 		log.Printf("save keys: %v", err)
 		m.renderAccount(w, r, http.StatusInternalServerError, "Could not save the key. Check the server log.", nil)
 	case action == "create":
+		m.s.securityEvent(r, "key created", v.Username, "key", name)
 		m.renderAccount(w, r, http.StatusOK, "", map[string]any{"NewKey": key, "NewKeyName": name})
 	default:
+		m.s.securityEvent(r, "key revoked", v.Username, "key", name)
 		http.Redirect(w, r, "/account", http.StatusSeeOther)
 	}
 }
@@ -290,8 +297,8 @@ func (m *remoteMode) acceptInvite(w http.ResponseWriter, r *http.Request) {
 	fail := func(msg string) {
 		m.s.render(w, r, http.StatusBadRequest, "invite", map[string]any{"Title": "Join Spark", "Invite": inv, "Error": msg})
 	}
-	if utf8.RuneCountInString(password) < minPasswordLength {
-		fail(fmt.Sprintf("Use at least %d characters.", minPasswordLength))
+	if msg := m.s.cfg.passwordProblem(password); msg != "" {
+		fail(strings.ToUpper(msg[:1]) + msg[1:] + ".")
 		return
 	}
 	if password != r.PostFormValue("confirm") {
@@ -332,5 +339,6 @@ func (m *remoteMode) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		fail("Could not create the account. Ask your admin to check the server log.")
 		return
 	}
+	m.s.securityEvent(r, "invite used", acct.Username)
 	http.Redirect(w, r, "/account", http.StatusSeeOther)
 }

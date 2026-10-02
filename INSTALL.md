@@ -108,18 +108,35 @@ All settings are files in `SparkRoot/Config/`, edited on the settings page or by
 | `accounts.json` | Login accounts (bcrypt passwords, hashed API keys), and on remote, pending invites |
 | `remote.json` | Remote only: `{"accept_all_types": true}` to accept every project type |
 | `session_key.json` | Signs login cookies. Delete it to sign everyone out |
+| `lockouts.json` | Failed logins per account. Cleared by a correct password or `web unlock` (see [Locked out](#locked-out)) |
 
 The web app creates any missing file with its defaults on start. A snapshot whose `project_type` isn't listed is hidden.
 
 | Container setting | Default | |
 |---|---|---|
 | `SPARK_MODE` | `local` | `remote` for a team server (see [Sharing with a team](#sharing-with-a-team)) |
-| `SPARK_USERNAME`, `SPARK_PASSWORD` | unset | Set both (`-e SPARK_USERNAME=me -e SPARK_PASSWORD=...`) to require login. Leave both unset for no login. Required on remote, where this is the admin; the username uses lowercase letters, digits and hyphens |
+| `SPARK_USERNAME`, `SPARK_PASSWORD` | unset | Set both (`-e SPARK_USERNAME=me -e SPARK_PASSWORD=...`) to require login. Leave both unset for no login. Required on remote, where this is the admin; the username uses lowercase letters, digits and hyphens. Spark won't start if the password is shorter than `SPARK_MIN_PASSWORD_LENGTH` |
+| `SPARK_MIN_PASSWORD_LENGTH` | `15` | Shortest password allowed, in characters, for `SPARK_PASSWORD` and new passwords. At most 72 bytes either way. Existing shorter passwords keep working until changed |
+| `SPARK_PENALTY_START` | `4` | Failed logins per account that wait 2 seconds each. The next waits 30 seconds, then 1, 2, 4, 8, 16 and 32 minutes. `0` means 2 seconds every time. An attempt during a wait isn't checked or counted |
+| `SPARK_LOCKOUT_AFTER` | start + 7 (`11`) | The failed login that locks the account until `web unlock`. No lock by default when the start is `0`. Example: five tries 2 seconds apart, then locked: `SPARK_PENALTY_START=0`, `SPARK_LOCKOUT_AFTER=5` |
+| `SPARK_LOCKOUT` | `on` | `off`: failed logins only wait, never lock |
 | `SPARK_ADDR` | `:8080` | Listen address inside the container |
 | `SPARK_URL` | unset | The address people open, like `https://spark.example.com`. Strongly recommended on a remote that faces the Internet. When set, Spark answers only to that host name, and invite links, the cross-site check, the Secure cookie flag and HSTS (for `https`) come from it |
 | `SPARK_ALLOW_NETWORK` | `false` | Local only. `true` lets a local answer to any host name, not just `localhost`, `127.0.0.1` and `[::1]`. Turn login on as well |
 | `SPARK_TRUSTED_PROXIES` | unset | Addresses or ranges of your HTTPS proxy, separated by commas, like `172.17.0.1` or `172.16.0.0/12`. Spark believes `X-Forwarded-For` and `X-Forwarded-Proto` only from these |
 | `SPARK_ROOT` | `/spark` | SparkRoot inside the container |
+
+Spark logs a warning at start for each setting looser than its default, and runs anyway. Security events (logins, lockouts, keys, invites, removed accounts) go to the normal log as lines starting `security:`, with the account and the client's address.
+
+### Locked out
+
+Too many failed logins lock an account. Clear it with:
+
+```sh
+docker exec spark web unlock <username>
+```
+
+Without Docker, run `./web/web unlock <username>` with the same settings as the server. A correct password also clears the count once any wait is over.
 
 ## Updating
 
@@ -143,5 +160,7 @@ SPARK_ROOT=~/Documents/Spark ./web/web    # http://127.0.0.1:8080
 Then copy `collector/collector.py`, `setup.sh`, `skill/` (as `Skill/`) and `handoff-skill/` (as `HandoffSkill/`) into SparkRoot yourself, and run `setup.sh`. Without `SPARK_ROOT`, the web app uses the folder its binary sits in. `web/web.env.example` lists the settings; pass the file with `-config`.
 
 ## Moving from an older Spark
+
+Older versions allowed 8-character passwords. If `SPARK_PASSWORD` is shorter than 15, Spark won't start until you lengthen it (or lower `SPARK_MIN_PASSWORD_LENGTH`). Invited people's shorter passwords keep working.
 
 Older versions named snapshots `<machine-id>__<folder>.md` and used a systemd timer. Delete the old data folder, disable the old timer (`systemctl --user disable --now spark-collector.timer`), and let the collector refill `Projects/` from your `spark.md` files.

@@ -9,7 +9,7 @@ services:
     environment: {}
       # SPARK_MODE: remote       # for a team server; needs the login below
       # SPARK_USERNAME: me       # set both to turn login on
-      # SPARK_PASSWORD: change-me
+      # SPARK_PASSWORD: at-least-fifteen-characters
       # SPARK_URL: https://spark.example.com  # remote: the address people open
       # SPARK_TRUSTED_PROXIES: 172.17.0.1      # remote: your HTTPS proxy
       # SPARK_ALLOW_NETWORK: "true"            # local: answer beyond localhost

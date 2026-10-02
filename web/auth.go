@@ -2,16 +2,20 @@ package main
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sync"
 	"time"
 
@@ -27,6 +31,7 @@ const (
 	accountsFile   = "accounts.json"
 	sessionKeyFile = "session_key.json"
 	sessionCookie  = "spark_session"
+	loginCookie    = "spark_login"
 	sessionLength  = 30 * 24 * time.Hour
 )
 
@@ -77,10 +82,11 @@ type auth struct {
 	key   []byte // signs session cookies and derives CSRF tokens
 	store *sessions.CookieStore
 
-	mu sync.Mutex // serializes read-modify-write of accounts.json
-	// Failed logins are serialized behind a one-second delay, which caps
-	// password guessing at about one attempt per second in total.
-	failMu sync.Mutex
+	mu   sync.Mutex // serializes read-modify-write of accounts.json
+	lock *lockouts  // failed logins, per account
+	// slots caps how many passwords are checked at once. bcrypt is slow on
+	// purpose, so guesses spread over many usernames can't take every CPU.
+	slots chan struct{}
 }
 
 // newAuth loads the session key and makes sure the env account exists with
@@ -91,7 +97,7 @@ func newAuth(root, username, password string) (*auth, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &auth{root: root, key: key, store: sessions.NewCookieStore(key)}
+	a := &auth{root: root, key: key, store: sessions.NewCookieStore(key), lock: newLockouts(root), slots: make(chan struct{}, runtime.NumCPU())}
 	a.store.Options = &sessions.Options{
 		Path:     "/",
 		MaxAge:   int(sessionLength.Seconds()),
@@ -204,23 +210,18 @@ func (a *auth) setSession(w http.ResponseWriter, r *http.Request, acct *account,
 // username takes as long as a wrong password.
 var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("spark-dummy"), bcrypt.DefaultCost)
 
-func (a *auth) checkCredentials(username, password string) *account {
-	d, err := a.load()
-	if err != nil {
-		log.Printf("load accounts: %v", err)
-		return nil
-	}
+func (a *auth) checkCredentials(d *accountsData, username, password string) *account {
 	acct := d.find(username)
 	hash := dummyHash
 	if acct != nil {
 		hash = []byte(acct.Password)
 	}
-	if bcrypt.CompareHashAndPassword(hash, []byte(password)) == nil && acct != nil {
+	a.slots <- struct{}{}
+	err := bcrypt.CompareHashAndPassword(hash, []byte(password))
+	<-a.slots
+	if err == nil && acct != nil {
 		return acct
 	}
-	a.failMu.Lock()
-	time.Sleep(time.Second)
-	a.failMu.Unlock()
 	return nil
 }
 
@@ -258,24 +259,98 @@ func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	s.render(w, r, http.StatusOK, "login", map[string]any{"Title": "Log in to Spark"})
+	s.renderLogin(w, r, http.StatusOK, "", "")
 }
 
+func (s *server) renderLogin(w http.ResponseWriter, r *http.Request, status int, username, errMsg string) {
+	s.render(w, r, status, "login", map[string]any{
+		"Title":      "Log in to Spark",
+		"Error":      errMsg,
+		"Username":   username,
+		"LoginToken": s.loginToken(w, r),
+	})
+}
+
+// loginToken ties the login form to a random value in a cookie of its own,
+// so another site can't log a visitor in to an account of its choosing
+// (login CSRF). There is no session yet to tie it to.
+func (s *server) loginToken(w http.ResponseWriter, r *http.Request) string {
+	nonce := ""
+	if c, err := r.Cookie(loginCookie); err == nil && len(c.Value) == 43 {
+		nonce = c.Value
+	} else {
+		nonce = randomToken(32)
+		http.SetCookie(w, &http.Cookie{Name: loginCookie, Value: nonce, Path: "/login", HttpOnly: true, Secure: s.isHTTPS(r), SameSite: http.SameSiteStrictMode})
+	}
+	mac := hmac.New(sha256.New, s.auth.key)
+	mac.Write([]byte("login\x00" + nonce))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func (s *server) checkLoginToken(r *http.Request) bool {
+	c, err := r.Cookie(loginCookie)
+	if err != nil || s.crossSite(r) {
+		return false
+	}
+	mac := hmac.New(sha256.New, s.auth.key)
+	mac.Write([]byte("login\x00" + c.Value))
+	want := base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+	return subtle.ConstantTimeCompare([]byte(r.PostFormValue("csrf")), []byte(want)) == 1
+}
+
+// login checks a password unless the account is waiting out a penalty or is
+// locked (lockout.go); refused attempts aren't checked or counted.
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	if s.auth == nil {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
 	username, password := r.PostFormValue("username"), r.PostFormValue("password")
-	acct := s.auth.checkCredentials(username, password)
-	if acct == nil {
-		s.render(w, r, http.StatusUnauthorized, "login", map[string]any{
-			"Title":    "Log in to Spark",
-			"Error":    "Wrong username or password.",
-			"Username": username,
-		})
+	if !s.checkLoginToken(r) {
+		s.renderLogin(w, r, http.StatusForbidden, username, "This form has expired. Try again.")
 		return
 	}
+	d, err := s.auth.load()
+	if err != nil {
+		log.Printf("load accounts: %v", err)
+		http.Error(w, "Could not log you in. Check the server log.", http.StatusInternalServerError)
+		return
+	}
+	known := d.find(username) != nil
+	v, err := s.auth.lock.begin(username, known)
+	if err != nil {
+		log.Printf("load lockouts: %v", err)
+		http.Error(w, "Could not log you in. Check the server log.", http.StatusInternalServerError)
+		return
+	}
+	if !v.ok {
+		msg := fmt.Sprintf("Too many failed logins for this account. Try again in %s.", waitText(v.wait))
+		if v.locked {
+			msg = lockedText
+		}
+		s.renderLogin(w, r, http.StatusTooManyRequests, username, msg)
+		return
+	}
+	acct := s.auth.checkCredentials(d, username, password)
+	e, err := s.auth.lock.end(s.cfg, username, known, acct != nil)
+	if err != nil {
+		log.Printf("save lockouts: %v", err)
+	}
+	if acct == nil {
+		msg := "Wrong username or password."
+		if e != nil {
+			s.securityEvent(r, "login failed", username, "failures", e.Failures)
+			if e.Locked {
+				s.securityEvent(r, "account locked", username, "failures", e.Failures)
+				msg += " " + lockedText
+			} else if wait := time.Until(e.Until); wait > 2*time.Second {
+				msg += fmt.Sprintf(" Try again in %s.", waitText(wait))
+			}
+		}
+		s.renderLogin(w, r, http.StatusUnauthorized, username, msg)
+		return
+	}
+	s.securityEvent(r, "login", username)
 	if err := s.auth.setSession(w, r, acct, s.isHTTPS(r)); err != nil {
 		log.Printf("save session: %v", err)
 		http.Error(w, "Could not log you in. Check the server log.", http.StatusInternalServerError)

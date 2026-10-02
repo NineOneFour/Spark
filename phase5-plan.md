@@ -1,6 +1,6 @@
 # Phase 5 Plan: Hardening
 
-Status: designed 2026-10-01 (decisions below); steps 1–2 built 2026-10-02.
+Status: designed 2026-10-01 (decisions below); steps 1–3 built 2026-10-02.
 Decisions are also in `.mex/context/decisions.md`, under "Phase 5".
 
 ## What phase 5 is
@@ -111,7 +111,7 @@ form tokens, bcrypt, hashed keys and invites, server timeouts, per-user API scop
 2. **Settings and the edge** (built 2026-10-02, `web/edge.go`): the new env settings and startup warnings;
    `SPARK_URL`, the host check, `SPARK_ALLOW_NETWORK`; trusted proxies and the client IP; CSP,
    HSTS, bundled fonts.
-3. **Login** (about half a day): the penalty schedule and `Config/lockouts.json`, the `web unlock`
+3. **Login** (built 2026-10-02, `web/lockout.go`): the penalty schedule and `Config/lockouts.json`, the `web unlock`
    subcommand, password length rules, the login form token, `security:` log lines.
 4. **Sessions** (about half a day): `Config/sessions.json`, idle expiry, real logout, "Log out
    everywhere", change password.

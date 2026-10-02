@@ -140,6 +140,18 @@ func (s *server) sameOrigin(r *http.Request, origin string) bool {
 	return err == nil && u.Host == r.Host
 }
 
+// securityEvent writes one security event to the normal log, prefixed
+// "security:" so it can be filtered, naming the account and the client's
+// address. extra is key, value pairs. Values are quoted, since some (a typed
+// username) come from the request.
+func (s *server) securityEvent(r *http.Request, event, account string, extra ...any) {
+	line := fmt.Sprintf("security: %s account=%q ip=%s", event, ghostKey(account), s.clientIP(r))
+	for i := 0; i+1 < len(extra); i += 2 {
+		line += fmt.Sprintf(" %s=%q", extra[i], fmt.Sprint(extra[i+1]))
+	}
+	log.Print(line)
+}
+
 // untrustedProxies remembers addresses already logged for sending proxy
 // headers, so each is logged once. It is capped, since anyone can send them.
 var untrustedProxies = struct {

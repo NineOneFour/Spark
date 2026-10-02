@@ -7,9 +7,9 @@
     {{if $.Error}}<p class="error" role="alert">{{$.Error}}</p>{{end}}
     <input type="hidden" name="username" value="{{.Username}}" autocomplete="username">
     <label for="password">Password</label>
-    <input id="password" name="password" type="password" autocomplete="new-password" minlength="8" required autofocus>
+    <input id="password" name="password" type="password" autocomplete="new-password" minlength="{{$.MinPassword}}" maxlength="72" required autofocus>
     <label for="confirm">Password again</label>
-    <input id="confirm" name="confirm" type="password" autocomplete="new-password" minlength="8" required>
+    <input id="confirm" name="confirm" type="password" autocomplete="new-password" minlength="{{$.MinPassword}}" maxlength="72" required>
     <button type="submit">Join</button>
   </form>
   {{else}}

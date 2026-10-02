@@ -33,8 +33,8 @@ var (
 
 const (
 	collectorSrc = "../../collector/collector.py" // tests run from web/e2e
-	adminPass    = "admin-password"
-	samPass      = "sam-password"
+	adminPass    = "admin-password-long"
+	samPass      = "sam-password-long"
 	waitLimit    = 20 * time.Second
 )
 
@@ -267,7 +267,7 @@ func (c *client) submit(page, action string, form url.Values) reply {
 
 func (c *client) login(user, pass string) {
 	c.t.Helper()
-	expect(c.t, c.post("/login", url.Values{"username": {user}, "password": {pass}}, c.base), http.StatusSeeOther, "log in as "+user)
+	expect(c.t, c.submit("/login", "/login", url.Values{"username": {user}, "password": {pass}}), http.StatusSeeOther, "log in as "+user)
 }
 
 func expect(t *testing.T, r reply, status int, what string) {
