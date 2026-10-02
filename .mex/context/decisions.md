@@ -32,11 +32,19 @@ last_updated: 2026-10-01
 
 ### Phase 4: Spark Handoff is a separate skill, run with or without the outgoing owner
 **Date:** 2026-10-01
-**Status:** Active (designed, not built)
+**Status:** Active (built 2026-10-01)
 **Decision:** A second skill, Spark Handoff ("Spark, handoff"), for passing a project completely to someone else. The outgoing owner runs it when they can; since they may be gone or unwilling (fired, walked out), anyone can run it, and it asks at the start whether the previous owner is there to help. Without them there is no interview: Traps and What's next are filled as best it can from the repo and marked as not confirmed by the previous owner. Commit messages count as the repo, used for any clues they hold (unlike `spark.md`, which never uses Git). It reads the repo (and `spark.md`, never writing it), drafts `handoff.md` next to `spark.md` in its own format, and asks the owner to correct and add to Traps and What's next. Sections: What it is, How to run it, How it's built, Current state, Key decisions (from the repo), Traps, What's next (from the owner). A rerun rewrites the repo sections and keeps the owner's earlier answers as the draft. The file stays in the repo; the dashboard doesn't read it. It ships in `SparkRoot/HandoffSkill/`, linked by `setup.sh` as `~/.claude/skills/spark-handoff`.
 **Reasoning:** The user: Spark jogs the memory of someone who knows the project; a handoff must bring someone from zero, and it may be used when the owner left on bad terms. What's worth capturing is what leaves with the outgoing owner, and short questions about a concrete draft get better answers than blank ones.
 **Alternatives considered:** The incoming owner runs it, or both in two steps; extra sections in `spark.md`; a `handoff/` folder; showing or pushing it on the dashboard; a People and access section; asking cold or one question at a time; rewriting from scratch or refusing on rerun; `Skills/` holding both skills; refreshing `spark.md` too.
 **Consequences:** `spark.md`, `skill/format.md`, the collector, web app and sync API are unchanged. `handoff-skill/format.md` becomes the contract for `handoff.md`.
+
+### Phase 4: handoff.md format
+**Date:** 2026-10-01
+**Status:** Active
+**Decision:** No front matter: `# <Project> Handoff`, then one line with the date and whether the previous owner took part in the latest run. Seven `##` sections, always present (an empty one says so in a sentence). Items in Traps and What's next are a title plus a nested 3-5 sentence description; an item drafted from the repo and not confirmed by the previous owner ends its title with `(unconfirmed)`. No length limit.
+**Reasoning:** No program parses `handoff.md`, so front matter would be structure for a reader that doesn't exist. Tagging per item, not per section, because a rerun without the owner mixes confirmed and new inferred items. Traps need room for what goes wrong and how to avoid it.
+**Alternatives considered:** Front matter like `spark.md`; one note per section; one-sentence items like `spark.md`; free prose.
+**Consequences:** The owner's answers are the untagged items, which is how a rerun keeps them.
 
 <!-- Phase 3 review decisions (2026-10-01). Built in commit bcb310a. -->
 

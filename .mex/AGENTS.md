@@ -11,6 +11,7 @@ A project-memory dashboard: an agent skill writes `spark.md` snapshots, a Python
 
 ## Non-Negotiables
 - `skill/format.md` is the single contract for `spark.md`; change it, `skill/template.md`, and `web/projects.go` validation together
+- `handoff-skill/format.md` is the contract for `handoff.md`, which only people read; the handoff skill never writes `spark.md`
 - No database: Markdown files in `SparkRoot/Projects/` and JSON in `SparkRoot/Config/` are the only source of truth. The only API is the sync API, served in remote mode (`web/api.go`)
 - The container never touches host folders outside SparkRoot; host-only steps belong in `setup.sh`
 - The web app writes only `Config/*.json` (including `state.json`); on local it never writes, renames, or deletes snapshots. On remote, a push writes `Projects/username__project__type.md`, and removing an account renames its files to `deleted-username__…` (`retire`)

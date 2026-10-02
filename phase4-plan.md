@@ -1,7 +1,7 @@
 # Phase 4 Plan: Spark Handoff
 
-Status: designed 2026-10-01 (10 locked decisions below), not built. It also carries the work left over
-from the phase 3 review (commit `bcb310a`).
+Status: Spark Handoff built 2026-10-01 (steps 1-5 below). The work left over from the phase 3 review
+(commit `bcb310a`) is still open.
 Decisions are also in `.mex/context/decisions.md`, under "Phase 4" and "Phase 3 review".
 
 ## What phase 4 is
@@ -59,7 +59,7 @@ that gets them up to speed; the card mechanics stay as they are.
 10. **Commit messages count as the repo.** Any clues in Git history (why something changed, what
     was tried) are used, for Key decisions above all. Unlike `spark.md`, which never uses Git.
 
-## Steps (not built)
+## Steps (built)
 
 1. `handoff-skill/` in the repo, like `skill/`: `SKILL.md` (trigger "Spark, handoff"; read the
    repo, an existing `handoff.md` and `spark.md`; ask whether the previous owner is there to

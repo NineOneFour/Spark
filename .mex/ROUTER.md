@@ -31,6 +31,7 @@ Then read this file fully before doing anything else in this session.
 - Phase 3 is built (2026-10-01, `phase3-plan.md`): `SPARK_MODE=local|remote`. Local pushes snapshots to remotes by project type (60s hash poll, plus at once on priority/archive changes) and pulls priorities every 15 minutes. Remote: invite-only accounts, per-machine API keys, one card per `project__type` with a tab per user
 - Priority and archive live in `Config/state.json`; the project page edits them, Settings → Archived unarchives
 - Phase 2 (2026-10-01): one Docker image owns SparkRoot (`Projects/`, `Skill/`, `Config/`) and fills it on every start
+- Phase 4 is built (2026-10-01): the Spark Handoff skill (`handoff-skill/`, "Spark, handoff") writes `handoff.md` for a new owner, per `handoff-skill/format.md`. Shipped to `SparkRoot/HandoffSkill/`, linked by `setup.sh` as `~/.claude/skills/spark-handoff`
 - Skill (`skill/SKILL.md`) generates `spark.md` per `skill/format.md`; allowed types come from `Config/project_types.json`
 - Collector: `collector.py` in SparkRoot, run by cron on the host; copies to `Projects/projectName__projectType.md`, never deletes
 - Web app: card grid, per-project page, settings page (scan roots, remotes, project types, colors, archived), login (optional on local, required on remote)
@@ -38,7 +39,7 @@ Then read this file fully before doing anything else in this session.
 - `setup.sh` (host): skill symlink and cron line. `INSTALL.md` documents the Docker route plus a short no-Docker route
 
 **Not yet built:**
-- Phase 4 (`phase4-plan.md`): a separate Spark Handoff skill that brings a new owner up to speed from zero (Spark only jogs memory); designed 2026-10-01 (10 locked decisions, 5 steps), not built; it also carries the phase 3 leftovers (parse limits on pushed files, CI, unit tests)
+- Phase 4 leftovers from phase 3 (`phase4-plan.md`): parse limits on pushed files, CI, unit tests
 - Publishing the image to Docker Hub: a later phase, not soon. Until then, build it locally (`docker build -t spark .`); docs use the name `spark`
 - CI, and unit tests beyond `web/render_test.go` (end-to-end tests exist: `web/e2e/run.sh`, on demand only)
 - Code-graph coverage: `.mex/graph.db` indexed 0 files at setup (Go), so the scaffold has no `grounds_to` entries

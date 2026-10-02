@@ -1,7 +1,7 @@
 #!/bin/sh
 # Fill SparkRoot from the image, then run the web app.
 #
-# collector.py, setup.sh, INSTALL.md and Skill/ are overwritten on every
+# collector.py, setup.sh, INSTALL.md, Skill/ and HandoffSkill/ are overwritten on every
 # start, so pulling a new image updates them. Config/ and Projects/ are never
 # touched here; the web app creates missing Config/ defaults itself.
 set -eu
@@ -27,8 +27,8 @@ put() {
 put collector.py
 put setup.sh
 put INSTALL.md
-# Every file in Skill/, including any in subfolders.
-(cd "$SHARE" && find Skill -type d) | while read -r d; do mkdir -p "$ROOT/$d"; done
-(cd "$SHARE" && find Skill -type f) | while read -r f; do put "$f"; done
+# Every file in Skill/ and HandoffSkill/, including any in subfolders.
+(cd "$SHARE" && find Skill HandoffSkill -type d) | while read -r d; do mkdir -p "$ROOT/$d"; done
+(cd "$SHARE" && find Skill HandoffSkill -type f) | while read -r f; do put "$f"; done
 
 exec web

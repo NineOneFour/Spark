@@ -4,18 +4,19 @@
 #
 #   ~/Documents/Spark/setup.sh
 #
-# It does the two things the container can't, since it never touches host
+# It does the things the container can't, since it never touches host
 # folders outside SparkRoot:
-#   1. links ~/.claude/skills/spark to SparkRoot/Skill
+#   1. links ~/.claude/skills/spark to SparkRoot/Skill, and
+#      ~/.claude/skills/spark-handoff to SparkRoot/HandoffSkill
 #   2. adds a cron line that runs the collector every 15 minutes
-# Both steps are skipped when already done, so rerunning it is safe.
+# Each step is skipped when already done, so rerunning it is safe.
 set -eu
 
 ROOT=$(cd "$(dirname "$0")" && pwd -P)
-SKILL_LINK="$HOME/.claude/skills/spark"
+SKILLS="$HOME/.claude/skills"
 
-if [ ! -f "$ROOT/collector.py" ] || [ ! -d "$ROOT/Skill" ]; then
-  echo "error: $ROOT has no collector.py or Skill/. Start the Spark container with this folder mounted first." >&2
+if [ ! -f "$ROOT/collector.py" ] || [ ! -d "$ROOT/Skill" ] || [ ! -d "$ROOT/HandoffSkill" ]; then
+  echo "error: $ROOT has no collector.py, Skill/ or HandoffSkill/. Start the Spark container with this folder mounted first." >&2
   exit 1
 fi
 
@@ -25,14 +26,19 @@ if [ -z "$PYTHON" ]; then
   exit 1
 fi
 
-# 1. Skill link. A real folder at that path is someone's own skill: leave it.
-mkdir -p "$(dirname "$SKILL_LINK")"
-if [ -L "$SKILL_LINK" ] || [ ! -e "$SKILL_LINK" ]; then
-  ln -sfn "$ROOT/Skill" "$SKILL_LINK"
-  echo "skill: $SKILL_LINK -> $ROOT/Skill"
-else
-  echo "skill: $SKILL_LINK exists and is not a link; left it alone. Move it away and rerun to link Spark's skill."
-fi
+# 1. Skill links. A real folder at that path is someone's own skill: leave it.
+link_skill() { # link_skill <name> <SparkRoot folder>
+  link="$SKILLS/$1"
+  if [ -L "$link" ] || [ ! -e "$link" ]; then
+    ln -sfn "$ROOT/$2" "$link"
+    echo "skill: $link -> $ROOT/$2"
+  else
+    echo "skill: $link exists and is not a link; left it alone. Move it away and rerun to link it."
+  fi
+}
+mkdir -p "$SKILLS"
+link_skill spark Skill
+link_skill spark-handoff HandoffSkill
 
 # 2. Cron line. collector.log holds the last run's output only.
 # Quoted, so a SparkRoot path with spaces still works. cron runs this with sh.

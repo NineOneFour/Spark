@@ -46,7 +46,7 @@ revision: 1
 - Go files: short lowercase nouns per concern (`main.go`, `auth.go`, `projects.go`, `state.go`, `settings.go`, `settings_page.go`, `api.go`); mode-only files are prefixed `local`/`remote` (`local_sync.go`, `remote_api.go`). The module is `package main`.
 - Python: one script, `collector/collector.py`, snake_case functions, module docstring explaining the why.
 - Env vars: web only, `SPARK_` prefix (`SPARK_ROOT`, `SPARK_ADDR`, …). The collector has none.
-- SparkRoot subfolders are Title case (`Projects/`, `Skill/`, `Config/`); settings files are snake_case JSON (`scan_roots.json`).
+- SparkRoot subfolders are Title case (`Projects/`, `Skill/`, `HandoffSkill/`, `Config/`); settings files are snake_case JSON (`scan_roots.json`).
 - Unexported Go identifiers everywhere except the template-facing types `Project`, `Section`, `Item`, whose exported fields are read by `html/template`.
 - Snapshot filenames: `projectName__projectType.md` (camelCase from front matter); temp files: `.<name>.tmp` or `.<name>.<random>.tmp`.
 - CSS: `p-<priority>` / `t-<project_type>` modifier classes on `.card` and `.band`; their colors come from `/colors.css`.
@@ -61,7 +61,7 @@ revision: 1
 - `web/` is the only Go module. `collector/collector.py` is a standalone stdlib script; it shares no code with the web app. Duplicated logic (for example the scan-skip rules or `~` expansion) is deliberate.
 - Web templates are `templates/base.html` plus one page file each, embedded with `//go:embed` and parsed per page in `web/main.go`. Every page defines `content` and renders through `base`.
 - Static assets live in `web/static/` and are embedded, so a rebuild is required after CSS changes.
-- Files shipped into SparkRoot (`collector/collector.py`, `setup.sh`, `INSTALL.md`, `skill/`) are copied by the `Dockerfile` into `/usr/local/share/spark/` and by `docker/entrypoint.sh` into SparkRoot on every start.
+- Files shipped into SparkRoot (`collector/collector.py`, `setup.sh`, `INSTALL.md`, `skill/`, `handoff-skill/`) are copied by the `Dockerfile` into `/usr/local/share/spark/` and by `docker/entrypoint.sh` into SparkRoot on every start.
 - User-facing docs live in `INSTALL.md` (also shipped) and `web/web.env.example`; `docs/` is gitignored.
 
 <!-- mex:entity

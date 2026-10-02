@@ -154,7 +154,7 @@ func TestImageFillsSparkRoot(t *testing.T) {
 		t.Skip("only the image has an entrypoint")
 	}
 	s := startSpark(t, "local")
-	for _, f := range []string{"collector.py", "setup.sh", "INSTALL.md", "Skill/SKILL.md", "Skill/format.md", "Skill/template.md", "Config/project_types.json"} {
+	for _, f := range []string{"collector.py", "setup.sh", "INSTALL.md", "Skill/SKILL.md", "Skill/format.md", "Skill/template.md", "HandoffSkill/SKILL.md", "HandoffSkill/format.md", "HandoffSkill/template.md", "Config/project_types.json"} {
 		if err := fileExists(s.root, f); err != nil {
 			t.Error(err)
 		}

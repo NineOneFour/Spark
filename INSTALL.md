@@ -2,7 +2,7 @@
 
 Spark has three pieces:
 
-- **The skill** writes `spark.md` in a project when you say `Spark, go`.
+- **The skill** writes `spark.md` in a project when you say `Spark, go`. A second skill, Spark Handoff, writes `handoff.md` when you say `Spark, handoff`.
 - **The collector** (`collector.py`) finds `spark.md` files in your scan roots and copies them into SparkRoot.
 - **The web app** shows them as cards, and has a settings page.
 
@@ -14,6 +14,7 @@ SparkRoot/
   setup.sh       one-time host setup
   INSTALL.md     this file
   Skill/         the Spark skill
+  HandoffSkill/  the Spark Handoff skill
   Config/        settings, plus state.json (each project's priority and archive flag)
   Projects/      snapshots, named projectName__projectType.md
 ```
@@ -46,7 +47,7 @@ The container never touches host folders outside SparkRoot, so two steps run on 
 ~/Documents/Spark/setup.sh
 ```
 
-It links `~/.claude/skills/spark` to `SparkRoot/Skill`, and adds a cron line that runs the collector every 15 minutes. The collector's last run is logged to `SparkRoot/collector.log`. Rerunning the script is safe.
+It links `~/.claude/skills/spark` to `SparkRoot/Skill` and `~/.claude/skills/spark-handoff` to `SparkRoot/HandoffSkill`, and adds a cron line that runs the collector every 15 minutes. The collector's last run is logged to `SparkRoot/collector.log`. Rerunning the script is safe.
 
 ## 3. Add scan roots
 
@@ -61,6 +62,8 @@ python3 ~/Documents/Spark/collector.py
 In any project, tell your coding agent `Spark, go`. The skill writes `spark.md`, the collector copies it into `Projects/`, and the card appears.
 
 The priority you give the skill is only the starting value. After the card first appears, change priority, or archive the project, on its page. Archived projects are hidden; unarchive them under **Settings → Archived**.
+
+To pass a project to someone else, tell your coding agent `Spark, handoff`. It writes `handoff.md` next to `spark.md`: everything a new owner needs to take the project over. It asks first whether the previous owner is there to answer questions; if not, it drafts from the repo and marks what it could not confirm. The file stays in the repo; the dashboard doesn't show it.
 
 ## Sharing with a team
 
@@ -114,7 +117,7 @@ The web app creates any missing file with its defaults on start. A snapshot whos
 
 ## Updating
 
-Pull the new image and recreate the container. On every start it overwrites `collector.py`, `setup.sh`, `INSTALL.md` and `Skill/` with the image's copies, so don't edit those; customize through `Config/` instead. `Config/` and `Projects/` are never overwritten.
+Pull the new image and recreate the container. On every start it overwrites `collector.py`, `setup.sh`, `INSTALL.md`, `Skill/` and `HandoffSkill/` with the image's copies, so don't edit those; customize through `Config/` instead. `Config/` and `Projects/` are never overwritten. If your install predates Spark Handoff, rerun `setup.sh` once to link it.
 
 ## Removing a project
 
@@ -131,7 +134,7 @@ Build the web app (Go 1.23 or newer) and point it at SparkRoot:
 SPARK_ROOT=~/Documents/Spark ./web/web    # http://127.0.0.1:8080
 ```
 
-Then copy `collector/collector.py`, `setup.sh` and `skill/` (as `Skill/`) into SparkRoot yourself, and run `setup.sh`. Without `SPARK_ROOT`, the web app uses the folder its binary sits in. `web/web.env.example` lists the settings; pass the file with `-config`.
+Then copy `collector/collector.py`, `setup.sh`, `skill/` (as `Skill/`) and `handoff-skill/` (as `HandoffSkill/`) into SparkRoot yourself, and run `setup.sh`. Without `SPARK_ROOT`, the web app uses the folder its binary sits in. `web/web.env.example` lists the settings; pass the file with `-config`.
 
 ## Moving from an older Spark
 

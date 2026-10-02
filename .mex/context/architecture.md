@@ -59,14 +59,17 @@ One Docker image is the core. It owns one host folder, **SparkRoot**, bind-mount
 ```text
 host                                         container (owns SparkRoot)
 skill: "Spark, go" → <project>/spark.md      entrypoint: copy collector.py, setup.sh,
-cron → SparkRoot/collector.py                  INSTALL.md, Skill/ into SparkRoot
+cron → SparkRoot/collector.py                  INSTALL.md, Skill/, HandoffSkill/
+                                               into SparkRoot
   reads Config/scan_roots.json               web app:
   scans roots for spark.md                     reads Projects/*.md on every request
   writes Projects/projectName__type.md  ──►    reads + writes Config/*.json (settings page)
 ~/.claude/skills/spark ──symlink──► Skill/     serves /colors.css from Config/
+~/.claude/skills/spark-handoff ──► HandoffSkill/
 ```
 
 - The skill writes a fresh `spark.md` in the project root; it never edits an old one.
+- The handoff skill ("Spark, handoff") writes `handoff.md` next to `spark.md`. Nothing else reads it: no collector, web app or sync changes.
 - `collector/collector.py` walks each scan root, stops descending once it finds `spark.md`, skips dot-dirs and `node_modules`/`vendor`/`build`/`dist`, and names each copy from front matter. It never deletes.
 - `web/projects.go` rereads `Projects/` and `project_types.json` on every page view; there is no cache or index.
 - The shared contracts are `skill/format.md`, the filename scheme, and the JSON files in `Config/`.
@@ -79,9 +82,10 @@ revision: 1
 -->
 ## Key Components
 - **skill/** (`SKILL.md`, `format.md`, `template.md`): agent instructions that generate `spark.md`. Shipped in the image, copied to `SparkRoot/Skill/`, symlinked from `~/.claude/skills/spark` by `setup.sh`. Reads allowed types from `../Config/project_types.json` via its real path.
+- **handoff-skill/** (`SKILL.md`, `format.md`, `template.md`): agent instructions that write `handoff.md` for a new owner. Asks first whether the previous owner is there; without them, items in Traps and What's next drafted from the repo carry `(unconfirmed)`. Uses Git commit messages (unlike `spark.md`). Never writes `spark.md`. Shipped like `skill/`, to `SparkRoot/HandoffSkill/`, symlinked from `~/.claude/skills/spark-handoff`.
 - **collector** (`collector/collector.py`): Python 3 stdlib script, run on the host by cron. `SPARK_ROOT` is the script's own folder. `scan`, `front_matter` (flat `key: value`), `camel_case`, `target_name`, atomic `put` (mkstemp + `os.replace`, mode 0644). Case-insensitive clash check: first path wins, rest logged. Exits 1 on a copy failure or a missing `scan_roots.json`.
 - **entrypoint** (`docker/entrypoint.sh`): refuses to start if `/spark` isn't writable, warns when run as root, overwrites the shipped files in SparkRoot (copy + rename), then `exec web`.
-- **setup.sh** (repo root, shipped into SparkRoot): host-only steps, idempotent. Symlinks the skill (leaves a real folder alone), adds the cron line (`> collector.log`).
+- **setup.sh** (repo root, shipped into SparkRoot): host-only steps, idempotent. Symlinks both skills (`link_skill`; leaves a real folder alone), adds the cron line (`> collector.log`).
 - **web server** (`web/main.go`): `net/http` mux with Go 1.22 patterns (`GET /{$}`, `GET /p/{id}`, `GET /settings`, `POST /settings/*`, `/login`, public `GET /colors.css`), embedded templates/static, `securityHeaders` (CSP, nosniff).
 - **settings** (`web/settings.go`): `ensureSettings` creates `Projects/`, `Config/` and missing default files on start (`scan_roots.json` only on local, in `newLocalMode`); loaders validate entries (`typeNameRe`, `colorRe`) and log bad ones once; `writeJSON` writes temp + rename.
 - **settings page** (`web/settings_page.go`): scan roots, project types, priority colors. `updateSettings` checks the post (`checkPost`: `Sec-Fetch-Site`/`Origin` + a form token: per account with login on, an HMAC of username and password tag under the session key; per process with login off; `csrfToken`), serializes writes under `settingsMu`, and edits the file as written so invalid hand entries survive.

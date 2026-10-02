@@ -29,10 +29,11 @@ skill/
   SKILL.md      the Spark skill
   format.md     the spark.md format, shared by the skill and web app
   template.md   spark.md skeleton
+handoff-skill/  the Spark Handoff skill ("Spark, handoff"): SKILL.md, format.md and template.md for handoff.md
 collector/      collector.py: finds spark.md files and copies them into SparkRoot
 web/            the dashboard and settings page
 docker/         container entrypoint
-setup.sh        host setup: skill symlink and cron line
+setup.sh        host setup: skill symlinks and cron line
 ```
 
 ## License

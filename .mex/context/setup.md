@@ -53,7 +53,7 @@ revision: 1
 ## Prerequisites
 - Docker (the normal route), or Go 1.23+ to build the web app yourself
 - `python3` on the host (the collector, stdlib only) and `crontab` (or another scheduler)
-- A coding agent that loads skills from `~/.claude/skills/` (for the skill)
+- A coding agent that loads skills from `~/.claude/skills/` (for the skills)
 - Development: Go is not required locally; `docker run --rm -u $(id -u):$(id -g) -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/gopath -v "$PWD":/src -w /src golang:1.23 go vet ./...` in `web/` works without it
 
 <!-- mex:entity
@@ -65,8 +65,8 @@ revision: 1
 ## First-time Setup
 1. `mkdir -p ~/Documents/Spark` (create SparkRoot yourself; if Docker creates it, root owns it)
 2. `docker build -t spark .` then `docker run -d --name spark -p 127.0.0.1:8080:8080 --user "$(id -u):$(id -g)" -v ~/Documents/Spark:/spark spark`
-3. The container fills SparkRoot (`collector.py`, `setup.sh`, `INSTALL.md`, `Skill/`, `Config/` defaults, `Projects/`)
-4. `~/Documents/Spark/setup.sh` on the host: links `~/.claude/skills/spark` → `SparkRoot/Skill` and adds the cron line
+3. The container fills SparkRoot (`collector.py`, `setup.sh`, `INSTALL.md`, `Skill/`, `HandoffSkill/`, `Config/` defaults, `Projects/`)
+4. `~/Documents/Spark/setup.sh` on the host: links `~/.claude/skills/spark` → `SparkRoot/Skill` and `~/.claude/skills/spark-handoff` → `SparkRoot/HandoffSkill`, and adds the cron line
 5. Add scan roots on http://127.0.0.1:8080/settings, then `python3 ~/Documents/Spark/collector.py` to collect right away
 
 Testing without touching your real setup: point the container at a scratch folder, and run `setup.sh` with `HOME=<scratch>` and a stub `crontab` first on `PATH`.
@@ -115,6 +115,6 @@ From documented behavior in `INSTALL.md` and the code:
 
 **Old cards stick around:** nothing is deleted automatically. Delete the file from `SparkRoot/Projects/` by hand.
 
-**Edits to `Skill/` or `collector.py` vanish:** the container overwrites them on every start. Customize through `Config/`, or change the repo and rebuild the image.
+**Edits to `Skill/`, `HandoffSkill/` or `collector.py` vanish:** the container overwrites them on every start. Customize through `Config/`, or change the repo and rebuild the image.
 
 **`cp` prompts in your shell:** some shells alias `cp` to `cp -i`; use `command cp -f` in scripts and tests.
