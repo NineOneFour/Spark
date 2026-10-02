@@ -39,7 +39,8 @@ Then read this file fully before doing anything else in this session.
 - `setup.sh` (host): skill symlink and cron line. `INSTALL.md` documents the Docker route plus a short no-Docker route
 
 **Not yet built:**
-- Phase 4 leftovers from phase 3 (`phase4-plan.md`): parse limits on pushed files, CI, unit tests
+- Phase 5 (`phase5-plan.md`): hardening against OWASP Top 10:2025 and the API Security Top 10; designed 2026-10-01 (18 locked decisions, 6 steps), not built. It covers the parse-limit leftover (file and project caps)
+- Phase 3 leftovers (`phase4-plan.md`): CI (deferred past phase 5), unit tests
 - Publishing the image to Docker Hub: a later phase, not soon. Until then, build it locally (`docker build -t spark .`); docs use the name `spark`
 - CI, and unit tests beyond `web/render_test.go` (end-to-end tests exist: `web/e2e/run.sh`, on demand only)
 - Code-graph coverage: `.mex/graph.db` indexed 0 files at setup (Go), so the scaffold has no `grounds_to` entries

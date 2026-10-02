@@ -28,6 +28,16 @@ last_updated: 2026-10-01
 
 ## Decision Log
 
+<!-- Phase 5 decisions (2026-10-01). Designed, not built; full list in phase5-plan.md. -->
+
+### Phase 5: hardening with safe defaults the operator can loosen
+**Date:** 2026-10-01
+**Status:** Active (designed, not built)
+**Decision:** Fix all 12 findings of an audit against OWASP Top 10:2025 and the API Security Top 10. Login limits count per account (no IPs); wrong API keys count per IP, with `SPARK_TRUSTED_PROXIES` saying whose `X-Forwarded-For` to believe. One penalty schedule for both (`SPARK_PENALTY_START` 4: 2 s waits, then 30 s, then doubling; lock at `SPARK_LOCKOUT_AFTER`, cleared by `web unlock`). 120 API calls per account a minute, 128 KB files, 50 projects per account (Settings page), and local paces itself to the limits the remote states. Server-side sessions, 24 h idle; 15-character passwords; optional `SPARK_URL` with a host check; local accepts only localhost names unless `SPARK_ALLOW_NETWORK`; `security:` log lines; bundled fonts; current Go, images pinned by tag. TLS and hosting stay out of scope.
+**Reasoning:** The user: "I'm not the security police, I want to set best practices by default but let the end user do their own thing." So every control has a safe default and an override, and loosening one logs a warning instead of refusing to start. Per-IP login limits need proxy trust that operators can get wrong, so login stays per account and the unlock command handles targeted lockouts.
+**Alternatives considered:** Per-IP login limits; a username inside API keys; a lock that expires by itself; key expiry; required `SPARK_URL`; always-on login; a separate security log file; Google Fonts; images pinned by digest; CI in this phase.
+**Consequences:** New Config files `lockouts.json` and `sessions.json`; a `web unlock` subcommand; `/api/types` gains limits; many new env settings for `INSTALL.md`.
+
 <!-- Phase 4 decisions (2026-10-01). Designed, not built; full list in phase4-plan.md. -->
 
 ### Phase 4: Spark Handoff is a separate skill, run with or without the outgoing owner
