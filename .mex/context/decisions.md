@@ -28,6 +28,58 @@ last_updated: 2026-10-01
 
 ## Decision Log
 
+<!-- Phase 4 decisions (2026-10-01). Designed, not built; full list in phase4-plan.md. -->
+
+### Phase 4: Spark Handoff is a separate skill, run with or without the outgoing owner
+**Date:** 2026-10-01
+**Status:** Active (designed, not built)
+**Decision:** A second skill, Spark Handoff ("Spark, handoff"), for passing a project completely to someone else. The outgoing owner runs it when they can; since they may be gone or unwilling (fired, walked out), anyone can run it, and it asks at the start whether the previous owner is there to help. Without them there is no interview: Traps and What's next are filled as best it can from the repo and marked as not confirmed by the previous owner. Commit messages count as the repo, used for any clues they hold (unlike `spark.md`, which never uses Git). It reads the repo (and `spark.md`, never writing it), drafts `handoff.md` next to `spark.md` in its own format, and asks the owner to correct and add to Traps and What's next. Sections: What it is, How to run it, How it's built, Current state, Key decisions (from the repo), Traps, What's next (from the owner). A rerun rewrites the repo sections and keeps the owner's earlier answers as the draft. The file stays in the repo; the dashboard doesn't read it. It ships in `SparkRoot/HandoffSkill/`, linked by `setup.sh` as `~/.claude/skills/spark-handoff`.
+**Reasoning:** The user: Spark jogs the memory of someone who knows the project; a handoff must bring someone from zero, and it may be used when the owner left on bad terms. What's worth capturing is what leaves with the outgoing owner, and short questions about a concrete draft get better answers than blank ones.
+**Alternatives considered:** The incoming owner runs it, or both in two steps; extra sections in `spark.md`; a `handoff/` folder; showing or pushing it on the dashboard; a People and access section; asking cold or one question at a time; rewriting from scratch or refusing on rerun; `Skills/` holding both skills; refreshing `spark.md` too.
+**Consequences:** `spark.md`, `skill/format.md`, the collector, web app and sync API are unchanged. `handoff-skill/format.md` becomes the contract for `handoff.md`.
+
+<!-- Phase 3 review decisions (2026-10-01). Built in commit bcb310a. -->
+
+### Phase 3 review: a removed account's files retire to deleted-<name>
+**Date:** 2026-10-01
+**Status:** Active (built 2026-10-01)
+**Decision:** Removing an account on a remote renames its files and `state.json` entries from `username__…` to `deleted-username__…` (`deleted-username-2__…` after an earlier removal), and archives them automatically 30 days after removal. `deleted-` is reserved: no invite or `SPARK_USERNAME` may start with it. A hand archive or unarchive before then cancels the automatic one. Accounts removed before this change keep their old names.
+**Reasoning:** The user: the files must not be lost, but a re-invited username must not inherit the old person's files and priorities.
+**Alternatives considered:** Leaving files under the old username (re-invite inherits them); archiving at once; a bare `deleted` owner (two removed people with the same project collide); a dated name; anonymous `deleted-1`, `deleted-2`.
+**Consequences:** The remote now renames snapshots, though it still never deletes them. A push writes its file under the state lock after rechecking its account, so it can't race a removal.
+
+### Phase 3 review: "Push everything again" mirrors local to a remote
+**Date:** 2026-10-01
+**Status:** Active (built 2026-10-01)
+**Decision:** Each remote in local Settings → Remotes has a "Push everything again" button. It re-sends every file ever sent to that remote, plus new ones, with content, priority and archive flag, and local wins, overwriting priorities set on the remote. A file archived before its first push still stays local. A remote that was wiped is not detected automatically.
+**Reasoning:** The user: a server going down and coming back empty is an edge case not worth designing for; a manual force sync that mirrors local is enough, and overwriting priorities is expected.
+**Alternatives considered:** Detecting missing files from the priorities list on each pull; pulling priorities before the forced push.
+**Consequences:** Removing a remote, or adding one under a removed name, forgets what was pushed to it (a different server may answer to that name). The forced push keeps the records and marks them changed.
+
+### Phase 3 review: form tokens per account
+**Date:** 2026-10-01
+**Status:** Active (built 2026-10-01)
+**Decision:** With login on, the CSRF form token is an HMAC of the username and password tag under the session key. With login off it stays one random token per process.
+**Reasoning:** One token per process meant every member of a remote saw the admin's token. The Sec-Fetch-Site/Origin checks and SameSite=Lax cookies already blocked cross-site posts; this removes the reliance on them.
+**Alternatives considered:** A random token stored in each session.
+**Consequences:** Logged-in forms no longer expire on restart; a password change replaces the token.
+
+### Phase 3 review: a pushed id must match its snapshot
+**Date:** 2026-10-01
+**Status:** Active (built 2026-10-01)
+**Decision:** The remote rejects (422) a push whose id isn't `camelCase(project)__camelCase(project_type)` from the snapshot's own front matter. The collector's front matter reader matches YAML on quotes and `# comments`, so both sides compute the same name.
+**Reasoning:** The id picks the card a file joins, so without the check one person could put a file of any project or type on another's card and set its name and description for everyone.
+**Alternatives considered:** Deriving the id on the remote and ignoring the one sent.
+**Consequences:** A hand-named file in local `Projects/` is never accepted by a remote; the local log shows the 422.
+
+### Phase 3 review: end-to-end tests on demand, two harnesses
+**Date:** 2026-10-01
+**Status:** Active (built 2026-10-01)
+**Decision:** `web/e2e/` (build tag `e2e`) runs the same scenarios against Sparks as processes (`web/e2e/run.sh`) or as containers from the image (`-docker`). They run only when the user asks. Sync is triggered by real actions (a remote or state change pushes at once, a restart pulls at once), not by a test-only interval setting.
+**Reasoning:** The user wanted both kinds, on demand. Real triggers keep test-only settings out of the product.
+**Alternatives considered:** A browser-driven suite; a `SPARK_SYNC_SECONDS` setting; running in `go test ./...`.
+**Consequences:** `go test ./...` stays unit-only. There is no CI yet.
+
 <!-- Phase 3 decisions (2026-10-01). Built 2026-10-01; full list in phase3-plan.md. -->
 
 ### Phase 3: open items answered
