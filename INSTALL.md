@@ -86,8 +86,8 @@ docker run -d --name spark-remote \
 
 Put it behind HTTPS (for example Caddy). `SPARK_URL` is the address people open; Spark then refuses any other host name and builds invite links from it. `SPARK_TRUSTED_PROXIES` is your proxy's address as Spark sees it (`172.17.0.1` for a proxy on the Docker host); if it's wrong, the log names the address it saw (`security: ignoring proxy headers from ...`). Then:
 
-1. **Admin:** under **Settings**, pick the project types the remote accepts (or accept all), and under **People** create an invite link for each person. Send the link yourself; it works once, for 7 days. **Remove** next to a person ends their login and API keys. The projects they pushed stay, renamed to `deleted-<name>` (so the username can be invited again and start clean), and are archived 30 days later. Usernames starting with `deleted-` are kept for this.
-2. **Each person:** open the link, set a password, then under **Account** create an API key for each machine. A key is shown once.
+1. **Admin:** under **Settings**, pick the project types the remote accepts (or accept all), and under **People** create an invite link for each person. Send the link yourself; it works once, for 7 days. **Remove** next to a person ends their login, sessions and API keys. The projects they pushed stay, renamed to `deleted-<name>` (so the username can be invited again and start clean), and are archived 30 days later. Usernames starting with `deleted-` are kept for this.
+2. **Each person:** open the link, set a password, then under **Account** create an API key for each machine. A key is shown once. **Account** also changes your password (which logs out your other sessions) and logs you out everywhere.
 3. **On each machine:** in the local Spark's **Settings → Remotes**, add the remote's URL and the key, then tick the project types to send there.
 
 From then on, local pushes a project within a minute of its content, priority or archive changing, and fetches priorities set on the remote every 15 minutes (the last change to reach the remote wins). Archiving locally archives on the remote too; archiving on the remote only hides it there. Only the file's owner or the admin can change its priority or archive it on the remote, and only the admin changes types and colors.
@@ -107,7 +107,8 @@ All settings are files in `SparkRoot/Config/`, edited on the settings page or by
 | `remotes.json` | Local only: remotes to push to, with their API keys |
 | `accounts.json` | Login accounts (bcrypt passwords, hashed API keys), and on remote, pending invites |
 | `remote.json` | Remote only: `{"accept_all_types": true}` to accept every project type |
-| `session_key.json` | Signs login cookies. Delete it to sign everyone out |
+| `session_key.json` | Derives the form tokens that stop cross-site posts |
+| `sessions.json` | Open login sessions (only hashes of their ids). To log everyone out, stop Spark, delete it, and start Spark |
 | `lockouts.json` | Failed logins per account. Cleared by a correct password or `web unlock` (see [Locked out](#locked-out)) |
 
 The web app creates any missing file with its defaults on start. A snapshot whose `project_type` isn't listed is hidden.
@@ -120,6 +121,7 @@ The web app creates any missing file with its defaults on start. A snapshot whos
 | `SPARK_PENALTY_START` | `4` | Failed logins per account that wait 2 seconds each. The next waits 30 seconds, then 1, 2, 4, 8, 16 and 32 minutes. `0` means 2 seconds every time. An attempt during a wait isn't checked or counted |
 | `SPARK_LOCKOUT_AFTER` | start + 7 (`11`) | The failed login that locks the account until `web unlock`. No lock by default when the start is `0`. Example: five tries 2 seconds apart, then locked: `SPARK_PENALTY_START=0`, `SPARK_LOCKOUT_AFTER=5` |
 | `SPARK_LOCKOUT` | `on` | `off`: failed logins only wait, never lock |
+| `SPARK_SESSION_IDLE` | `24h` | A login session ends after this long without use (a Go duration: `30m`, `8h`). Sessions also end 30 days after login |
 | `SPARK_ADDR` | `:8080` | Listen address inside the container |
 | `SPARK_URL` | unset | The address people open, like `https://spark.example.com`. Strongly recommended on a remote that faces the Internet. When set, Spark answers only to that host name, and invite links, the cross-site check, the Secure cookie flag and HSTS (for `https`) come from it |
 | `SPARK_ALLOW_NETWORK` | `false` | Local only. `true` lets a local answer to any host name, not just `localhost`, `127.0.0.1` and `[::1]`. Turn login on as well |

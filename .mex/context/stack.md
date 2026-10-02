@@ -35,14 +35,13 @@ last_updated: 2026-10-02
 - **github.com/yuin/goldmark** (web) — Markdown rendering; relied on for default raw-HTML escaping.
 - **gopkg.in/yaml.v3** (web) — front matter parsing into the `frontMatter` struct.
 - **github.com/microcosm-cc/bluemonday** (web) — sanitizes goldmark output on every render (`UGCPolicy`, narrowed).
-- **github.com/gorilla/sessions** (web) — signed login cookie.
 - **golang.org/x/crypto/bcrypt** (web) — password hashes. Kept current; `govulncheck` is clean.
 
 ## What We Deliberately Do NOT Use
 - No database or ORM: Markdown files in `SparkRoot/Projects/` and JSON in `Config/` are the store.
 - No frontend framework, JS bundler, or JavaScript at all: pages are server-rendered HTML forms plus CSS.
 - No HTTP router or config library: stdlib mux and a small hand-written env-file reader.
-- No server-side session store: sessions are signed cookies (gorilla/sessions `CookieStore`).
+- Sessions are server-side in `Config/sessions.json` (hashed ids), no session library.
 
 ## Version Constraints
 - Go 1.22+ is required for the `http.ServeMux` patterns; `go.mod` pins `go 1.27.0`, which matches the Docker `golang:1.27.1-alpine3.24` build image.

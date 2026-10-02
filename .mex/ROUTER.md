@@ -39,7 +39,7 @@ Then read this file fully before doing anything else in this session.
 - `setup.sh` (host): skill symlink and cron line. `INSTALL.md` documents the Docker route plus a short no-Docker route
 
 **Not yet built:**
-- Phase 5 (`phase5-plan.md`): hardening against OWASP Top 10:2025 and the API Security Top 10; designed 2026-10-01 (18 locked decisions, 6 steps). Steps 1–2 built 2026-10-02 (Go 1.27.1/Alpine 3.24.2; `web/edge.go`: `SPARK_URL`, host check, `SPARK_ALLOW_NETWORK`, `SPARK_TRUSTED_PROXIES`, CSP/HSTS, bundled fonts). Step 3: login penalties and lockouts (`web/lockout.go`, `web unlock`), 15-character passwords, login form token, `security:` log lines. Steps 4–6 not built. It covers the parse-limit leftover (file and project caps)
+- Phase 5 (`phase5-plan.md`): hardening against OWASP Top 10:2025 and the API Security Top 10; designed 2026-10-01 (18 locked decisions, 6 steps). Steps 1–2 built 2026-10-02 (Go 1.27.1/Alpine 3.24.2; `web/edge.go`: `SPARK_URL`, host check, `SPARK_ALLOW_NETWORK`, `SPARK_TRUSTED_PROXIES`, CSP/HSTS, bundled fonts). Step 3: login penalties and lockouts (`web/lockout.go`, `web unlock`), 15-character passwords, login form token, `security:` log lines. Step 4: server-side sessions (`web/sessions.go`, `Config/sessions.json`, 24h idle), real logout, Log out everywhere, change password; gorilla/sessions dropped. Steps 5–6 not built. It covers the parse-limit leftover (file and project caps)
 - Phase 3 leftovers (`phase4-plan.md`): CI (deferred past phase 5), unit tests
 - Publishing the image to Docker Hub: a later phase, not soon. Until then, build it locally (`docker build -t spark .`); docs use the name `spark`
 - CI, and unit tests beyond `web/render_test.go` (end-to-end tests exist: `web/e2e/run.sh`, on demand only)

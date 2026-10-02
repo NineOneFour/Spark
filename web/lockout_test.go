@@ -184,10 +184,11 @@ func TestLoginFlow(t *testing.T) {
 	if err := ensureSettings(root); err != nil {
 		t.Fatal(err)
 	}
-	cfg := config{Root: root, Mode: "local", PenaltyStart: 1, LockoutAfter: 4, MinPassword: 15}
+	cfg := config{Root: root, Mode: "local", Username: "admin", Password: "correct-horse-battery",
+		PenaltyStart: 1, LockoutAfter: 4, MinPassword: 15, SessionIdle: time.Hour}
 	s := &server{cfg: cfg, tmpl: parseTemplates(), csrf: newCSRFToken()}
 	var err error
-	if s.auth, err = newAuth(root, "admin", "correct-horse-battery"); err != nil {
+	if s.auth, err = newAuth(cfg); err != nil {
 		t.Fatal(err)
 	}
 	s.mode = &localMode{s: s}

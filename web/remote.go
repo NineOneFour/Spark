@@ -35,6 +35,8 @@ func (m *remoteMode) routes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /settings/accounts", s.auth.require(s.updateSettings(m.changeAccounts)))
 	mux.HandleFunc("GET /account", s.auth.require(m.account))
 	mux.HandleFunc("POST /account/keys", s.auth.require(m.changeKeys))
+	mux.HandleFunc("POST /account/password", s.auth.require(m.changePassword))
+	mux.HandleFunc("POST /account/logout-all", s.auth.require(m.logoutEverywhere))
 	mux.HandleFunc("GET /invite/{token}", m.invitePage)
 	mux.HandleFunc("POST /invite/{token}", m.acceptInvite)
 	mux.HandleFunc("GET /api/types", m.requireKey(m.apiTypes))

@@ -40,5 +40,32 @@
       <button name="action" value="create">Create key</button>
     </form>
   </section>
+
+  {{if .CanChangePassword}}
+  <section>
+    <h3>Password</h3>
+    {{if .Notice}}<p class="notice" role="status">{{.Notice}}</p>{{end}}
+    <form method="post" action="/account/password" class="stack">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="hidden" name="username" value="{{.Account.Username}}" autocomplete="username">
+      <label for="current">Current password</label>
+      <input id="current" name="current" type="password" autocomplete="current-password" required>
+      <label for="new-password">New password</label>
+      <input id="new-password" name="password" type="password" autocomplete="new-password" minlength="{{.MinPassword}}" maxlength="72" required>
+      <label for="confirm">New password again</label>
+      <input id="confirm" name="confirm" type="password" autocomplete="new-password" minlength="{{.MinPassword}}" maxlength="72" required>
+      <button>Change password</button>
+    </form>
+  </section>
+  {{end}}
+
+  <section>
+    <h3>Sessions</h3>
+    <p class="hint">Log out of Spark on every browser, this one included.</p>
+    <form method="post" action="/account/logout-all" class="row">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button>Log out everywhere</button>
+    </form>
+  </section>
 </main>
 {{end}}

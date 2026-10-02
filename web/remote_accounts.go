@@ -105,6 +105,9 @@ func (m *remoteMode) changeAccounts(r *http.Request) error {
 		return err
 	}
 	m.s.securityEvent(r, "account removed", username, "by", viewer(r).Username)
+	if err := m.s.auth.sessions.endAll(username, ""); err != nil {
+		log.Printf("end sessions of %s: %v", username, err)
+	}
 	if err := m.s.auth.lock.forget(username); err != nil {
 		log.Printf("clear lockout of %s: %v", username, err)
 	}
@@ -193,6 +196,8 @@ func (m *remoteMode) renderAccount(w http.ResponseWriter, r *http.Request, statu
 		"Title":   "Account · Spark",
 		"Error":   errMsg,
 		"Account": v,
+		// The env admin's password comes only from SPARK_PASSWORD.
+		"CanChangePassword": v.Username != m.s.cfg.Username,
 	}
 	for k, val := range extra {
 		data[k] = val
@@ -257,6 +262,107 @@ func (m *remoteMode) changeKeys(w http.ResponseWriter, r *http.Request) {
 		m.s.securityEvent(r, "key revoked", v.Username, "key", name)
 		http.Redirect(w, r, "/account", http.StatusSeeOther)
 	}
+}
+
+// changePassword sets a new password for the viewer after checking the
+// current one, and logs out their other sessions. The check counts toward
+// the account's failed logins, so a stolen session can't guess the password.
+func (m *remoteMode) changePassword(w http.ResponseWriter, r *http.Request) {
+	s := m.s
+	if !s.checkPost(r) {
+		http.Error(w, "This form has expired. Reload the account page and try again.", http.StatusForbidden)
+		return
+	}
+	v := viewer(r)
+	if v.Username == s.cfg.Username {
+		m.renderAccount(w, r, http.StatusForbidden, "Your password is set by SPARK_PASSWORD where Spark runs.", nil)
+		return
+	}
+	current, next := r.PostFormValue("current"), r.PostFormValue("password")
+	if msg := s.cfg.passwordProblem(next); msg != "" {
+		m.renderAccount(w, r, http.StatusBadRequest, "New password: "+msg+".", nil)
+		return
+	}
+	if next != r.PostFormValue("confirm") {
+		m.renderAccount(w, r, http.StatusBadRequest, "The two new passwords don't match.", nil)
+		return
+	}
+	verdict, err := s.auth.lock.begin(v.Username, true)
+	if err != nil {
+		log.Printf("load lockouts: %v", err)
+		m.renderAccount(w, r, http.StatusInternalServerError, "Could not change the password. Check the server log.", nil)
+		return
+	}
+	if !verdict.ok {
+		msg := fmt.Sprintf("Too many wrong passwords. Try again in %s.", waitText(verdict.wait))
+		if verdict.locked {
+			msg = lockedText
+		}
+		m.renderAccount(w, r, http.StatusTooManyRequests, msg, nil)
+		return
+	}
+	d, err := s.auth.load()
+	var acct *account
+	if err == nil {
+		acct = s.auth.checkCredentials(d, v.Username, current)
+	}
+	e, lerr := s.auth.lock.end(s.cfg, v.Username, true, acct != nil)
+	if lerr != nil {
+		log.Printf("save lockouts: %v", lerr)
+	}
+	if err != nil {
+		log.Printf("load accounts: %v", err)
+		m.renderAccount(w, r, http.StatusInternalServerError, "Could not change the password. Check the server log.", nil)
+		return
+	}
+	if acct == nil {
+		s.securityEvent(r, "password change failed", v.Username)
+		msg := "Your current password is wrong."
+		if e != nil && e.Locked {
+			s.securityEvent(r, "account locked", v.Username, "failures", e.Failures)
+			msg += " " + lockedText
+		}
+		m.renderAccount(w, r, http.StatusUnauthorized, msg, nil)
+		return
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(next), bcrypt.DefaultCost)
+	if err == nil {
+		err = s.auth.update(func(d *accountsData) (bool, error) {
+			if acct = d.find(v.Username); acct == nil {
+				return false, userError("Your account no longer exists.")
+			}
+			acct.Password = string(hash)
+			return true, nil
+		})
+	}
+	if err == nil {
+		err = s.auth.sessions.endAll(v.Username, sessionID(r))
+	}
+	if err != nil {
+		log.Printf("change password: %v", err)
+		m.renderAccount(w, r, http.StatusInternalServerError, "Could not change the password. Check the server log.", nil)
+		return
+	}
+	s.securityEvent(r, "password changed", v.Username)
+	// The form token comes from the password, so render with the new one.
+	r = r.WithContext(withViewer(r.Context(), acct))
+	m.renderAccount(w, r, http.StatusOK, "", map[string]any{"Notice": "Password changed. Your other sessions are logged out."})
+}
+
+// logoutEverywhere ends every session of the viewer's account, this one too.
+func (m *remoteMode) logoutEverywhere(w http.ResponseWriter, r *http.Request) {
+	if !m.s.checkPost(r) {
+		http.Error(w, "This form has expired. Reload the account page and try again.", http.StatusForbidden)
+		return
+	}
+	if err := m.s.auth.sessions.endAll(viewer(r).Username, ""); err != nil {
+		log.Printf("end sessions: %v", err)
+		m.renderAccount(w, r, http.StatusInternalServerError, "Could not log out everywhere. Check the server log.", nil)
+		return
+	}
+	clearSessionCookie(w)
+	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
 // findInvite returns the unexpired invite for a link's token, or nil.
@@ -332,7 +438,7 @@ func (m *remoteMode) acceptInvite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil {
-		err = m.s.auth.setSession(w, r, acct, m.s.isHTTPS(r))
+		err = m.s.auth.setSession(w, acct, m.s.isHTTPS(r))
 	}
 	if err != nil {
 		log.Printf("accept invite: %v", err)

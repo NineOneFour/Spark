@@ -453,6 +453,17 @@ code {
 
 .row.add { border-bottom: 0; }
 
+/* A form of labeled fields, one under another (change password). */
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  max-width: 22rem;
+}
+
+.stack input { align-self: stretch; margin-bottom: 0.5rem; }
+
 .row-name {
   flex: 1;
   min-width: 8rem;

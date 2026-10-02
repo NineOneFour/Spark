@@ -49,6 +49,8 @@ type config struct {
 	PenaltyStart int // SPARK_PENALTY_START: failures that wait 2 s before the waits grow
 	LockoutAfter int // the failure that locks (SPARK_LOCKOUT_AFTER); 0 = never
 	MinPassword  int // SPARK_MIN_PASSWORD_LENGTH, in characters
+
+	SessionIdle time.Duration // SPARK_SESSION_IDLE: a session unused this long ends
 }
 
 // Defaults for the settings that can be loosened, so startup can warn when
@@ -56,6 +58,7 @@ type config struct {
 const (
 	defaultPenaltyStart = 4
 	defaultMinPassword  = 15
+	defaultSessionIdle  = 24 * time.Hour
 	// maxPasswordBytes is bcrypt's limit; it ignores anything longer.
 	maxPasswordBytes = 72
 )
@@ -118,7 +121,7 @@ func main() {
 
 	s := &server{cfg: cfg, tmpl: parseTemplates(), csrf: newCSRFToken()}
 	if cfg.Username != "" {
-		if s.auth, err = newAuth(cfg.Root, cfg.Username, cfg.Password); err != nil {
+		if s.auth, err = newAuth(cfg); err != nil {
 			log.Fatalf("login: %v", err)
 		}
 	} else {
@@ -273,6 +276,7 @@ var configKeys = []string{
 	"SPARK_ROOT", "SPARK_ADDR", "SPARK_MODE", "SPARK_USERNAME", "SPARK_PASSWORD",
 	"SPARK_URL", "SPARK_ALLOW_NETWORK", "SPARK_TRUSTED_PROXIES",
 	"SPARK_PENALTY_START", "SPARK_LOCKOUT_AFTER", "SPARK_LOCKOUT", "SPARK_MIN_PASSWORD_LENGTH",
+	"SPARK_SESSION_IDLE",
 }
 
 // loadConfig reads the env file if one is given, then lets environment
@@ -344,6 +348,12 @@ func loadConfig(path string) (config, error) {
 	if cfg.MinPassword, err = intSetting(vals, "SPARK_MIN_PASSWORD_LENGTH", defaultMinPassword, 1, maxPasswordBytes); err != nil {
 		return config{}, err
 	}
+	cfg.SessionIdle = defaultSessionIdle
+	if v := strings.TrimSpace(vals["SPARK_SESSION_IDLE"]); v != "" {
+		if cfg.SessionIdle, err = time.ParseDuration(v); err != nil || cfg.SessionIdle < time.Minute {
+			return config{}, fmt.Errorf("SPARK_SESSION_IDLE %q: use a duration of at least a minute, like 24h or 30m", v)
+		}
+	}
 	if (cfg.Username == "") != (cfg.Password == "") {
 		return config{}, errors.New("set both SPARK_USERNAME and SPARK_PASSWORD, or neither")
 	}
@@ -405,6 +415,9 @@ func (c config) warnLoosened() {
 	}
 	if c.PenaltyStart > defaultPenaltyStart {
 		log.Printf("SPARK_PENALTY_START is %d: failed logins wait only 2 s for the first %d (recommended %d)", c.PenaltyStart, c.PenaltyStart, defaultPenaltyStart)
+	}
+	if c.SessionIdle > defaultSessionIdle {
+		log.Printf("SPARK_SESSION_IDLE is %v: sessions stay open longer without use than the recommended %v", c.SessionIdle, defaultSessionIdle)
 	}
 	switch {
 	case c.LockoutAfter == 0:

@@ -19,12 +19,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gorilla/sessions"
 	"golang.org/x/crypto/bcrypt"
 )
 
 // Login is the same in both modes: accounts in Config/accounts.json with
-// bcrypt passwords, and a signed session cookie. Local has one account, from
+// bcrypt passwords, and server-side sessions (sessions.go). Local has one account, from
 // SPARK_USERNAME/SPARK_PASSWORD. Remote starts with that account as admin
 // and adds more by invite (remote_accounts.go).
 const (
@@ -78,9 +77,9 @@ func (d *accountsData) find(username string) *account {
 }
 
 type auth struct {
-	root  string
-	key   []byte // signs session cookies and derives CSRF tokens
-	store *sessions.CookieStore
+	root     string
+	key      []byte // derives form tokens
+	sessions *sessionStore
 
 	mu   sync.Mutex // serializes read-modify-write of accounts.json
 	lock *lockouts  // failed logins, per account
@@ -89,21 +88,21 @@ type auth struct {
 	slots chan struct{}
 }
 
-// newAuth loads the session key and makes sure the env account exists with
-// the env password, as admin. Changing the password in the env changes it
-// here, and signs that account out.
-func newAuth(root, username, password string) (*auth, error) {
+// newAuth loads the key and the sessions, and makes sure the env account
+// exists with the env password, as admin. Changing the password in the env
+// changes it here, and logs that account out everywhere.
+func newAuth(cfg config) (*auth, error) {
+	root, username, password := cfg.Root, cfg.Username, cfg.Password
 	key, err := loadSessionKey(root)
 	if err != nil {
 		return nil, err
 	}
-	a := &auth{root: root, key: key, store: sessions.NewCookieStore(key), lock: newLockouts(root), slots: make(chan struct{}, runtime.NumCPU())}
-	a.store.Options = &sessions.Options{
-		Path:     "/",
-		MaxAge:   int(sessionLength.Seconds()),
-		HttpOnly: true,
-		SameSite: http.SameSiteLaxMode,
+	st, err := loadSessions(root, cfg.SessionIdle)
+	if err != nil {
+		return nil, err
 	}
+	a := &auth{root: root, key: key, sessions: st, lock: newLockouts(root), slots: make(chan struct{}, runtime.NumCPU())}
+	changed := false
 	err = a.update(func(d *accountsData) (bool, error) {
 		acct := d.find(username)
 		if acct == nil {
@@ -117,13 +116,17 @@ func newAuth(root, username, password string) (*auth, error) {
 			return false, err
 		}
 		acct.Password, acct.Admin = string(hash), true
+		changed = true
 		return true, nil
 	})
+	if err == nil && changed {
+		err = st.endAll(username, "")
+	}
 	return a, err
 }
 
-// loadSessionKey reads the cookie signing key, creating it on first start.
-// It is kept in Config so sessions survive a restart.
+// loadSessionKey reads the key form tokens are derived from, creating it on
+// first start. It is kept in Config so open forms survive a restart.
 func loadSessionKey(root string) ([]byte, error) {
 	path := filepath.Join(configDir(root), sessionKeyFile)
 	var stored struct {
@@ -167,43 +170,58 @@ func (a *auth) update(change func(d *accountsData) (bool, error)) error {
 	return writeJSON(filepath.Join(configDir(a.root), accountsFile), d)
 }
 
-// passwordTag ties a session to the password it was made with, so changing
-// a password signs that account out everywhere.
+// passwordTag ties form tokens to the password, so a password change
+// replaces them.
 func passwordTag(acct *account) string {
 	sum := sha256.Sum256([]byte(acct.Password))
 	return hex.EncodeToString(sum[:8])
 }
 
+// sessionID is the id in the request's session cookie, or "".
+func sessionID(r *http.Request) string {
+	c, err := r.Cookie(sessionCookie)
+	if err != nil {
+		return ""
+	}
+	return c.Value
+}
+
 // sessionAccount returns the logged-in account, or nil.
 func (a *auth) sessionAccount(r *http.Request) *account {
-	sess, err := a.store.Get(r, sessionCookie)
-	if err != nil {
+	id := sessionID(r)
+	if id == "" {
 		return nil
 	}
-	username, _ := sess.Values["user"].(string)
-	tag, _ := sess.Values["pw"].(string)
+	username, ok := a.sessions.lookup(id)
+	if !ok {
+		return nil
+	}
 	d, err := a.load()
 	if err != nil {
 		log.Printf("load accounts: %v", err)
 		return nil
 	}
-	acct := d.find(username)
-	if acct == nil || tag != passwordTag(acct) {
-		return nil
-	}
-	return acct
+	return d.find(username)
 }
 
-// setSession marks the cookie Secure only over HTTPS (see isHTTPS); browsers
-// drop Secure cookies on plain http to a LAN address.
-func (a *auth) setSession(w http.ResponseWriter, r *http.Request, acct *account, secure bool) error {
-	sess, _ := a.store.New(r, sessionCookie)
-	sess.Values["user"] = acct.Username
-	sess.Values["pw"] = passwordTag(acct)
-	opts := *a.store.Options
-	opts.Secure = secure
-	sess.Options = &opts
-	return sess.Save(r, w)
+// setSession starts a session and sets its cookie. The cookie is Secure
+// only over HTTPS (see isHTTPS); browsers drop Secure cookies on plain http
+// to a LAN address.
+func (a *auth) setSession(w http.ResponseWriter, acct *account, secure bool) error {
+	id, err := a.sessions.create(acct.Username)
+	if err != nil {
+		return err
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: sessionCookie, Value: id, Path: "/", MaxAge: int(sessionLength.Seconds()),
+		HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode,
+	})
+	return nil
+}
+
+// clearSessionCookie tells the browser to drop the session cookie.
+func clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Path: "/", MaxAge: -1, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 }
 
 // dummyHash is compared against when the username doesn't exist, so a wrong
@@ -351,7 +369,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.securityEvent(r, "login", username)
-	if err := s.auth.setSession(w, r, acct, s.isHTTPS(r)); err != nil {
+	if err := s.auth.setSession(w, acct, s.isHTTPS(r)); err != nil {
 		log.Printf("save session: %v", err)
 		http.Error(w, "Could not log you in. Check the server log.", http.StatusInternalServerError)
 		return
@@ -359,8 +377,8 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-// logout clears the session cookie. It is a POST with the form token, so
-// another site can't log people out.
+// logout ends the session on the server and clears the cookie. It is a POST
+// with the form token, so another site can't log people out.
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	if s.auth == nil {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -374,13 +392,10 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "This form has expired. Reload the page and try again.", http.StatusForbidden)
 		return
 	}
-	sess, _ := s.auth.store.New(r, sessionCookie)
-	opts := *s.auth.store.Options
-	opts.MaxAge = -1
-	sess.Options = &opts
-	if err := sess.Save(r, w); err != nil {
-		log.Printf("clear session: %v", err)
+	if err := s.auth.sessions.end(sessionID(r)); err != nil {
+		log.Printf("end session: %v", err)
 	}
+	clearSessionCookie(w)
 	http.Redirect(w, r, "/login", http.StatusSeeOther)
 }
 
