@@ -41,7 +41,7 @@
 
   <section>
     <h3>Remotes</h3>
-    <p class="hint">Team Spark servers this deployment pushes to. Each project goes to every remote its type is ticked for. Priorities set on a remote come back every 15 minutes.</p>
+    <p class="hint">Team Spark servers this deployment pushes to. Each project goes to every remote its type is ticked for. Priorities set on a remote come back every 15 minutes. If a remote lost its files, Push everything again mirrors this machine to it: content, priority and archive flag.</p>
     {{range .Remotes}}
     <form method="post" action="/settings/remotes" class="remote">
       <input type="hidden" name="csrf" value="{{$.CSRF}}">
@@ -54,6 +54,7 @@
         {{end}}
       </fieldset>
       <button name="action" value="types">Save types</button>
+      <button name="action" value="resync" class="quiet">Push everything again</button>
       <button name="action" value="remove" class="quiet">Remove</button>
     </form>
     {{else}}
@@ -131,7 +132,7 @@
 
   <section>
     <h3>People</h3>
-    <p class="hint">Invite someone by link: copy it and send it yourself. It works once, for 7 days. Removing someone ends their login and API keys; the projects they pushed stay.</p>
+    <p class="hint">Invite someone by link: copy it and send it yourself. It works once, for 7 days. Removing someone ends their login and API keys. Their projects stay, under deleted-<em>name</em>, and are archived 30 days later.</p>
     {{if .InviteLink}}
     <p class="notice" role="status">Invite for <strong>{{.InviteFor}}</strong>. Copy it now; it won't be shown again:<br><code class="secret">{{.InviteLink}}</code></p>
     {{end}}

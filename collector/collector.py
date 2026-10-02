@@ -73,8 +73,25 @@ def front_matter(text):
             return fields
         key, sep, value = line.partition(":")
         if sep:
-            fields[key.strip()] = value.strip().strip("\"'")
+            fields[key.strip()] = scalar(value)
     raise ValueError("front matter is not closed")
+
+
+def scalar(value):
+    """Read one value the way the web app's YAML parser does.
+
+    The filename is built from these values and the web app checks it
+    against its own parse, so a quoted value loses only its quotes and an
+    unquoted one loses a trailing " # comment".
+    """
+    value = value.strip()
+    m = re.match(r"'((?:[^']|'')*)'", value)
+    if m:
+        return m.group(1).replace("''", "'")
+    m = re.match(r'"((?:[^"\\]|\\.)*)"', value)
+    if m:
+        return re.sub(r"\\(.)", r"\1", m.group(1))
+    return re.split(r"\s#", value, maxsplit=1)[0].strip()
 
 
 def camel_case(text):

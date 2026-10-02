@@ -48,6 +48,7 @@ There are three boundaries, each with its own log: the collector on the host (`S
 - Stale card that won't go away: nothing is ever deleted automatically. Renaming a project or changing its type writes a new file and leaves the old one; delete it from `Projects/` by hand.
 - Removing a type on the settings page hides every snapshot of that type.
 - `last_updated` without a UTC offset fails `time.RFC3339` parsing, so the card disappears.
+- Missing on a remote only: the remote rejects a push whose id isn't the collector's name for the snapshot (`camelCase(project)__camelCase(project_type)`), so a hand-named file in local `Projects/` never arrives. The local web log shows `push of <id> to <remote>: 422 ... does not match the snapshot`.
 - The container refuses to start if `/spark` isn't writable: Docker created the host folder as root, or `--user` is missing.
 
 ## Verify

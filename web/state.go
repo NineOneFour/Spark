@@ -23,6 +23,7 @@ type fileState struct {
 	Priority    string                 `json:"priority"`
 	PrioritySet time.Time              `json:"priority_set"`
 	Archived    bool                   `json:"archived"`
+	ArchiveAt   *time.Time             `json:"archive_at,omitempty"` // archived automatically from then on
 	Sync        map[string]*syncRecord `json:"sync,omitempty"`
 }
 
@@ -54,15 +55,20 @@ func seedState(start string) *fileState {
 }
 
 // applyState copies each file's state onto it, seeding state.json for files
-// it hasn't seen.
+// it hasn't seen and archiving files whose archive date has passed.
 func (s *server) applyState(projects []*Project) error {
 	return s.updateState(func(st map[string]*fileState) (bool, error) {
 		changed := false
+		now := time.Now()
 		for _, p := range projects {
 			e := st[p.ID]
 			if e == nil {
 				e = seedState(p.startPriority)
 				st[p.ID] = e
+				changed = true
+			}
+			if e.ArchiveAt != nil && now.After(*e.ArchiveAt) {
+				e.Archived, e.ArchiveAt = true, nil
 				changed = true
 			}
 			p.Priority, p.Archived = e.Priority, e.Archived
@@ -129,9 +135,9 @@ func (s *server) changeState(w http.ResponseWriter, r *http.Request) {
 		case "priority":
 			e.Priority, e.PrioritySet = priority, time.Now().UTC()
 		case "archive":
-			e.Archived = true
+			e.Archived, e.ArchiveAt = true, nil // a choice made by hand wins
 		case "unarchive":
-			e.Archived = false
+			e.Archived, e.ArchiveAt = false, nil
 		}
 		return true, nil
 	})

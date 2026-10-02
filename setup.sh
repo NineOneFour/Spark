@@ -35,7 +35,8 @@ else
 fi
 
 # 2. Cron line. collector.log holds the last run's output only.
-CRON_LINE="*/15 * * * * $PYTHON $ROOT/collector.py > $ROOT/collector.log 2>&1"
+# Quoted, so a SparkRoot path with spaces still works. cron runs this with sh.
+CRON_LINE="*/15 * * * * '$PYTHON' '$ROOT/collector.py' > '$ROOT/collector.log' 2>&1"
 if ! command -v crontab >/dev/null 2>&1; then
   echo "cron: crontab not found. Schedule this yourself:"
   echo "  $CRON_LINE"

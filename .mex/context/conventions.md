@@ -102,7 +102,7 @@ Before presenting any code:
 - [ ] `go vet ./...` and `gofmt -l .` are clean in `web/`; `python3 -m py_compile collector/collector.py` passes
 - [ ] If the `spark.md` contract changed: `skill/format.md`, `skill/template.md`, `web/projects.go`, and `collector/collector.py` (filename fields) all agree
 - [ ] New env settings are in `configKeys`, `web/web.env.example`, the `INSTALL.md` table, and (if relevant) `Dockerfile` `ENV`
-- [ ] The web app writes only `Config/*.json` (through `writeJSON`), plus pushed snapshots on remote (`writeFileAtomic`); the collector writes only `Projects/` (through `put`); nothing deletes snapshots
+- [ ] The web app writes only `Config/*.json` (through `writeJSON`), plus pushed snapshots on remote (`writeFileAtomic`) and the rename of a removed account's files (`retire`); the collector writes only `Projects/` (through `put`); nothing deletes snapshots
 - [ ] Mode-specific behavior goes through the `mode` interface, not a mode check in shared code
 - [ ] `go test ./...` passes in `web/`
 - [ ] Untrusted snapshot text still goes through goldmark or `html/template` escaping; no `template.HTML` built from raw input; anything written into `/colors.css` matches `typeNameRe`/`colorRe`

@@ -74,6 +74,7 @@ func (d *accountsData) find(username string) *account {
 
 type auth struct {
 	root  string
+	key   []byte // signs session cookies and derives CSRF tokens
 	store *sessions.CookieStore
 
 	mu sync.Mutex // serializes read-modify-write of accounts.json
@@ -90,7 +91,7 @@ func newAuth(root, username, password string) (*auth, error) {
 	if err != nil {
 		return nil, err
 	}
-	a := &auth{root: root, store: sessions.NewCookieStore(key)}
+	a := &auth{root: root, key: key, store: sessions.NewCookieStore(key)}
 	a.store.Options = &sessions.Options{
 		Path:     "/",
 		MaxAge:   int(sessionLength.Seconds()),
@@ -257,7 +258,7 @@ func (s *server) loginPage(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
-	s.render(w, r, "login", map[string]any{"Title": "Log in to Spark"})
+	s.render(w, r, http.StatusOK, "login", map[string]any{"Title": "Log in to Spark"})
 }
 
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
@@ -268,8 +269,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	username, password := r.PostFormValue("username"), r.PostFormValue("password")
 	acct := s.auth.checkCredentials(username, password)
 	if acct == nil {
-		w.WriteHeader(http.StatusUnauthorized)
-		s.render(w, r, "login", map[string]any{
+		s.render(w, r, http.StatusUnauthorized, "login", map[string]any{
 			"Title":    "Log in to Spark",
 			"Error":    "Wrong username or password.",
 			"Username": username,
@@ -290,6 +290,10 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	if s.auth == nil {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
+	}
+	// Log out isn't behind require, so find the viewer its form token is for.
+	if acct := s.auth.sessionAccount(r); acct != nil {
+		r = r.WithContext(withViewer(r.Context(), acct))
 	}
 	if !s.checkPost(r) {
 		http.Error(w, "This form has expired. Reload the page and try again.", http.StatusForbidden)

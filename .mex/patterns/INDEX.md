@@ -27,3 +27,4 @@ Lookup table for all pattern files in this directory. Check here before starting
 | [add-web-page.md](add-web-page.md) | Adding a new page, route, or handler to the web dashboard |
 | [change-snapshot-format.md](change-snapshot-format.md) | Adding or changing a spark.md field, priority/type value, or section |
 | [debug-missing-card.md](debug-missing-card.md) | A project's snapshot is missing, stale, or wrong on the dashboard |
+| [run-e2e.md](run-e2e.md) | The user asks to run, add to, or debug the end-to-end tests |

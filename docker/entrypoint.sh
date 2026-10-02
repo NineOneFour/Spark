@@ -24,12 +24,11 @@ put() {
   mv -f "$tmp" "$ROOT/$1"
 }
 
-mkdir -p "$ROOT/Skill"
 put collector.py
 put setup.sh
 put INSTALL.md
-for f in "$SHARE"/Skill/*; do
-  put "Skill/$(basename "$f")"
-done
+# Every file in Skill/, including any in subfolders.
+(cd "$SHARE" && find Skill -type d) | while read -r d; do mkdir -p "$ROOT/$d"; done
+(cd "$SHARE" && find Skill -type f) | while read -r f; do put "$f"; done
 
 exec web

@@ -36,7 +36,7 @@ mex:
 ## Steps
 1. Create `web/templates/<page>.html` defining `{{define "content"}}…{{end}}`; set `Title` in the data map for `base.html`.
 2. Add `"<page>"` to the page list in `main()` so it gets parsed.
-3. Write a `func (s *server) <page>(w, r)` handler; load data via `s.loadProjects()` if needed, then `s.render(w, r, "<page>", data)` (it adds `Viewer` and `Remote`). A page for one mode only is a method on `localMode` or `remoteMode`, registered in that mode's `routes`.
+3. Write a `func (s *server) <page>(w, r)` handler; load data via `s.loadProjects()` if needed, then `s.render(w, r, status, "<page>", data)` (it sets the status after `Content-Type`, and adds `Viewer`, `CSRF` and the mode's `pageData`, such as `Remote`). Never call `w.WriteHeader` before `render`. A page for one mode only is a method on `localMode` or `remoteMode`, registered in that mode's `routes`.
 4. Register it: `mux.HandleFunc("GET /<path>", s.auth.require(s.<page>))` in `main()` (shared) or the mode's `routes`.
 5. Add styles to `web/static/style.css`; rebuild (assets are embedded).
 

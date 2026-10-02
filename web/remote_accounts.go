@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -48,6 +50,9 @@ func (m *remoteMode) changeInvites(w http.ResponseWriter, r *http.Request) {
 			if !usernameRe.MatchString(username) {
 				return false, userError("A username uses lowercase letters and digits, with words joined by hyphens, like sam or sam-lee.")
 			}
+			if strings.HasPrefix(username, removedPrefix) {
+				return false, userError(fmt.Sprintf("Usernames starting with %s are kept for the files of removed people.", removedPrefix))
+			}
 			if d.find(username) != nil {
 				return false, userError(fmt.Sprintf("%s already has an account.", username))
 			}
@@ -76,10 +81,10 @@ func (m *remoteMode) changeInvites(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// changeAccounts removes an account: its login, API keys and sessions go;
-// the files it pushed stay, shown as before, since nothing deletes
-// snapshots. The first admin comes from the env and would be recreated on
-// the next start, so it can't be removed here.
+// changeAccounts removes an account: its login, API keys and sessions go,
+// and its files move to a retired name (see retire). The first admin comes
+// from the env and would be recreated on the next start, so it can't be
+// removed here.
 func (m *remoteMode) changeAccounts(r *http.Request) error {
 	username := r.PostFormValue("username")
 	if r.PostFormValue("action") != "remove" {
@@ -88,11 +93,89 @@ func (m *remoteMode) changeAccounts(r *http.Request) error {
 	if username == m.s.cfg.Username {
 		return userError(fmt.Sprintf("%s is the admin set by SPARK_USERNAME, so it can't be removed here.", username))
 	}
-	return m.s.auth.update(func(d *accountsData) (bool, error) {
+	removed := false
+	err := m.s.auth.update(func(d *accountsData) (bool, error) {
 		n := len(d.Accounts)
 		d.Accounts = slices.DeleteFunc(d.Accounts, func(a *account) bool { return a.Username == username })
-		return len(d.Accounts) != n, nil
+		removed = len(d.Accounts) != n
+		return removed, nil
 	})
+	if err != nil || !removed {
+		return err
+	}
+	return m.retire(username)
+}
+
+const (
+	// removedPrefix marks the files of removed accounts. No account can
+	// have it, so a retired name never belongs to anyone.
+	removedPrefix = "deleted-"
+	// retiredArchiveAfter is how long a removed account's files stay on
+	// the cards before they are archived.
+	retiredArchiveAfter = 30 * 24 * time.Hour
+)
+
+// retire renames a removed account's files from username__… to
+// deleted-username__… (deleted-username-2__… if that was used by an earlier
+// removal), so they aren't lost and a new account with the same username
+// starts clean. Their state moves with them, set to archive in 30 days.
+func (m *remoteMode) retire(username string) error {
+	dir := filepath.Join(m.s.cfg.Root, "Projects")
+	from := username + "__"
+	var firstErr error
+	err := m.s.updateState(func(st map[string]*fileState) (bool, error) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return false, err
+		}
+		taken := func(owner string) bool {
+			prefix := owner + "__"
+			for id := range st {
+				if strings.HasPrefix(id, prefix) {
+					return true
+				}
+			}
+			return slices.ContainsFunc(entries, func(e os.DirEntry) bool { return strings.HasPrefix(e.Name(), prefix) })
+		}
+		to := removedPrefix + username
+		for n := 2; taken(to); n++ {
+			to = fmt.Sprintf("%s%s-%d", removedPrefix, username, n)
+		}
+
+		archiveAt := time.Now().UTC().Add(retiredArchiveAfter)
+		move := func(rest string) {
+			e := st[from+rest]
+			if e == nil {
+				return
+			}
+			delete(st, from+rest)
+			if !e.Archived {
+				e.ArchiveAt = &archiveAt
+			}
+			st[to+"__"+rest] = e
+		}
+		changed := false
+		for _, e := range entries {
+			rest, ok := strings.CutPrefix(e.Name(), from)
+			if !ok || !strings.HasSuffix(rest, ".md") {
+				continue
+			}
+			if err := os.Rename(filepath.Join(dir, e.Name()), filepath.Join(dir, to+"__"+rest)); err != nil {
+				log.Printf("retire %s: %v", e.Name(), err)
+				if firstErr == nil {
+					firstErr = err
+				}
+				continue
+			}
+			move(strings.TrimSuffix(rest, ".md"))
+			changed = true
+		}
+		return changed, nil
+	})
+	if err != nil {
+		return err
+	}
+	return firstErr
 }
 
 func (m *remoteMode) account(w http.ResponseWriter, r *http.Request) {
@@ -104,14 +187,12 @@ func (m *remoteMode) renderAccount(w http.ResponseWriter, r *http.Request, statu
 	data := map[string]any{
 		"Title":   "Account · Spark",
 		"Error":   errMsg,
-		"CSRF":    m.s.csrf,
 		"Account": v,
 	}
 	for k, val := range extra {
 		data[k] = val
 	}
-	w.WriteHeader(status)
-	m.s.render(w, r, "account", data)
+	m.s.render(w, r, status, "account", data)
 }
 
 // changeKeys creates an API key (shown once) or revokes one. Every key on an
@@ -189,10 +270,11 @@ func (m *remoteMode) findInvite(token string) *invite {
 
 func (m *remoteMode) invitePage(w http.ResponseWriter, r *http.Request) {
 	inv := m.findInvite(r.PathValue("token"))
+	status := http.StatusOK
 	if inv == nil {
-		w.WriteHeader(http.StatusNotFound)
+		status = http.StatusNotFound
 	}
-	m.s.render(w, r, "invite", map[string]any{"Title": "Join Spark", "Invite": inv})
+	m.s.render(w, r, status, "invite", map[string]any{"Title": "Join Spark", "Invite": inv})
 }
 
 // acceptInvite sets the new account's password, uses up the invite, and logs
@@ -201,14 +283,12 @@ func (m *remoteMode) invitePage(w http.ResponseWriter, r *http.Request) {
 func (m *remoteMode) acceptInvite(w http.ResponseWriter, r *http.Request) {
 	inv := m.findInvite(r.PathValue("token"))
 	if inv == nil {
-		w.WriteHeader(http.StatusNotFound)
-		m.s.render(w, r, "invite", map[string]any{"Title": "Join Spark"})
+		m.s.render(w, r, http.StatusNotFound, "invite", map[string]any{"Title": "Join Spark"})
 		return
 	}
 	password := r.PostFormValue("password")
 	fail := func(msg string) {
-		w.WriteHeader(http.StatusBadRequest)
-		m.s.render(w, r, "invite", map[string]any{"Title": "Join Spark", "Invite": inv, "Error": msg})
+		m.s.render(w, r, http.StatusBadRequest, "invite", map[string]any{"Title": "Join Spark", "Invite": inv, "Error": msg})
 	}
 	if utf8.RuneCountInString(password) < minPasswordLength {
 		fail(fmt.Sprintf("Use at least %d characters.", minPasswordLength))

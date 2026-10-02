@@ -2,12 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 )
 
 // The sync API (see api.go). Ingest is a plain Markdown write after checking
@@ -109,15 +111,32 @@ func (m *remoteMode) apiPush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fileID := v.Username + "__" + id
-	if err := writeFileAtomic(filepath.Join(m.s.cfg.Root, "Projects", fileID+".md"), []byte(req.Content)); err != nil {
-		log.Printf("save push %s: %v", fileID, err)
-		http.Error(w, "could not save the snapshot", http.StatusInternalServerError)
+	// The id picks the card the file joins, so it must be the one the
+	// collector would name this snapshot; otherwise anyone could put a file
+	// of any project or type onto someone else's card.
+	if want := camelCase(p.Name) + "__" + camelCase(p.Type); id != want {
+		http.Error(w, fmt.Sprintf("file id %s does not match the snapshot, which the collector names %s", id, want), http.StatusUnprocessableEntity)
 		return
 	}
 
+	fileID := v.Username + "__" + id
 	var resp pushResponse
+	gone := false
+	// The file and its state are written under the state lock, which
+	// removing an account also holds while it renames the account's files,
+	// so a push that races a removal can't leave a file under the old name.
 	err = m.s.updateState(func(st map[string]*fileState) (bool, error) {
+		d, err := m.s.auth.load()
+		if err != nil {
+			return false, err
+		}
+		if d.find(v.Username) == nil {
+			gone = true
+			return false, nil
+		}
+		if err := writeFileAtomic(filepath.Join(m.s.cfg.Root, "Projects", fileID+".md"), []byte(req.Content)); err != nil {
+			return false, err
+		}
 		e := st[fileID]
 		if e == nil {
 			e = seedState(p.startPriority)
@@ -132,9 +151,13 @@ func (m *remoteMode) apiPush(w http.ResponseWriter, r *http.Request) {
 		resp = pushResponse{Priority: e.Priority, PrioritySet: e.PrioritySet}
 		return true, nil
 	})
+	if gone {
+		http.Error(w, "unknown API key", http.StatusUnauthorized)
+		return
+	}
 	if err != nil {
-		log.Printf("save state for %s: %v", fileID, err)
-		http.Error(w, "could not save the snapshot's state", http.StatusInternalServerError)
+		log.Printf("save push %s: %v", fileID, err)
+		http.Error(w, "could not save the snapshot", http.StatusInternalServerError)
 		return
 	}
 	writeAPI(w, resp)
@@ -159,4 +182,22 @@ func (m *remoteMode) apiPriorities(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeAPI(w, out)
+}
+
+// wordRe and camelCase match the collector's camel_case: join the letter and
+// digit runs, "Spark / Web App" -> "sparkWebApp".
+var wordRe = regexp.MustCompile(`[\p{L}\p{N}]+`)
+
+func camelCase(text string) string {
+	var b strings.Builder
+	for i, w := range wordRe.FindAllString(text, -1) {
+		w = strings.ToLower(w)
+		if i > 0 {
+			r := []rune(w)
+			r[0] = unicode.ToUpper(r[0])
+			w = string(r)
+		}
+		b.WriteString(w)
+	}
+	return b.String()
 }

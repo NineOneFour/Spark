@@ -80,11 +80,13 @@ docker run -d --name spark-remote \
 
 Put it behind HTTPS (for example Caddy). Then:
 
-1. **Admin:** under **Settings**, pick the project types the remote accepts (or accept all), and under **People** create an invite link for each person. Send the link yourself; it works once, for 7 days. **Remove** next to a person ends their login and API keys; the projects they pushed stay.
+1. **Admin:** under **Settings**, pick the project types the remote accepts (or accept all), and under **People** create an invite link for each person. Send the link yourself; it works once, for 7 days. **Remove** next to a person ends their login and API keys. The projects they pushed stay, renamed to `deleted-<name>` (so the username can be invited again and start clean), and are archived 30 days later. Usernames starting with `deleted-` are kept for this.
 2. **Each person:** open the link, set a password, then under **Account** create an API key for each machine. A key is shown once.
 3. **On each machine:** in the local Spark's **Settings → Remotes**, add the remote's URL and the key, then tick the project types to send there.
 
 From then on, local pushes a project within a minute of its content, priority or archive changing, and fetches priorities set on the remote every 15 minutes (the last change to reach the remote wins). Archiving locally archives on the remote too; archiving on the remote only hides it there. Only the file's owner or the admin can change its priority or archive it on the remote, and only the admin changes types and colors.
+
+If a remote loses its files, **Push everything again** next to it mirrors this machine to it: every project it has ever sent there, plus any new ones, goes again with its content, priority and archive flag, replacing the remote's. A project archived before it was ever pushed stays local.
 
 ## Settings
 

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"errors"
@@ -15,9 +17,9 @@ import (
 	"strings"
 )
 
-// newCSRFToken returns a random token for this process. Every settings form
-// carries it, so another site can't post to the page even when login is off
-// and there is no session cookie to tie a token to.
+// newCSRFToken returns a random token for this process, the form token when
+// login is off and there is no account to tie one to. Every form carries a
+// token, so another site can't post to the page.
 func newCSRFToken() string {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -38,7 +40,19 @@ func (s *server) checkPost(r *http.Request) bool {
 			return false
 		}
 	}
-	return subtle.ConstantTimeCompare([]byte(r.PostFormValue("csrf")), []byte(s.csrf)) == 1
+	return subtle.ConstantTimeCompare([]byte(r.PostFormValue("csrf")), []byte(s.csrfToken(viewer(r)))) == 1
+}
+
+// csrfToken is the form token for a viewer. With login on it is derived from
+// the account, so one person on a remote can't learn another's token, and a
+// password change replaces it. It also survives a restart.
+func (s *server) csrfToken(v *account) string {
+	if v == nil || s.auth == nil {
+		return s.csrf
+	}
+	mac := hmac.New(sha256.New, s.auth.key)
+	mac.Write([]byte("csrf\x00" + v.Username + "\x00" + passwordTag(v)))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
 }
 
 type priorityColor struct {
@@ -57,7 +71,6 @@ func (s *server) renderSettings(w http.ResponseWriter, r *http.Request, status i
 	data := map[string]any{
 		"Title": "Settings · Spark",
 		"Error": errMsg,
-		"CSRF":  s.csrf,
 	}
 	if s.mode.canEditSettings(v) {
 		types, err := loadProjectTypes(s.cfg.Root)
@@ -95,26 +108,19 @@ func (s *server) renderSettings(w http.ResponseWriter, r *http.Request, status i
 	for k, val := range extra {
 		data[k] = val
 	}
-	w.WriteHeader(status)
-	s.render(w, r, "settings", data)
+	s.render(w, r, status, "settings", data)
 }
 
 // updateSettings wraps a settings change: it checks the post and the
 // viewer's right to change shared settings, serializes writes, and either
 // redirects back to the page or shows the error there.
 func (s *server) updateSettings(change func(r *http.Request) error) http.HandlerFunc {
-	return s.updateSettingsAs(func(r *http.Request) bool { return s.mode.canEditSettings(viewer(r)) }, change)
-}
-
-// updateSettingsAs is updateSettings with its own permission check, for
-// settings any viewer may change (such as their own API keys).
-func (s *server) updateSettingsAs(allowed func(r *http.Request) bool, change func(r *http.Request) error) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !s.checkPost(r) {
 			http.Error(w, "This form has expired. Reload the settings page and try again.", http.StatusForbidden)
 			return
 		}
-		if !allowed(r) {
+		if !s.mode.canEditSettings(viewer(r)) {
 			http.Error(w, "Only an admin can change this.", http.StatusForbidden)
 			return
 		}

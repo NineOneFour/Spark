@@ -45,6 +45,8 @@ func (l *localMode) acceptsType(name string, listed map[string]bool) bool { retu
 func (l *localMode) canEdit(*account, *Project) bool { return true }
 func (l *localMode) canEditSettings(*account) bool   { return true }
 
+func (l *localMode) pageData(map[string]any) {}
+
 func (l *localMode) stateChanged() {
 	select {
 	case l.kick <- struct{}{}:
@@ -187,13 +189,23 @@ func (l *localMode) changeRemotes(r *http.Request) error {
 			return userError(fmt.Sprintf("%s no longer exists.", name))
 		}
 		chosen := r.PostForm["type"]
-		accepted, err := fetchRemoteTypes(remotes[i])
-		if err != nil {
-			return userError(fmt.Sprintf("Could not reach %s to check its project types: %v", name, err))
-		}
+		// Only newly ticked types need the remote's say, so unticking
+		// works while the remote is down.
+		var added []string
 		for _, t := range chosen {
-			if !accepted.All && !slices.Contains(accepted.Types, t) {
-				return userError(fmt.Sprintf("%s does not accept %s projects. It accepts: %s.", name, t, strings.Join(accepted.Types, ", ")))
+			if !slices.Contains(remotes[i].Types, t) {
+				added = append(added, t)
+			}
+		}
+		if len(added) > 0 {
+			accepted, err := fetchRemoteTypes(remotes[i])
+			if err != nil {
+				return userError(fmt.Sprintf("Could not reach %s to check its project types: %v", name, err))
+			}
+			for _, t := range added {
+				if !accepted.All && !slices.Contains(accepted.Types, t) {
+					return userError(fmt.Sprintf("%s does not accept %s projects. It accepts: %s.", name, t, strings.Join(accepted.Types, ", ")))
+				}
 			}
 		}
 		remotes[i].Types = chosen
@@ -201,12 +213,61 @@ func (l *localMode) changeRemotes(r *http.Request) error {
 		if i >= 0 {
 			remotes = slices.Delete(remotes, i, i+1)
 		}
+	case "resync":
+		if i < 0 {
+			return userError(fmt.Sprintf("%s no longer exists.", name))
+		}
+		if err := l.resetPushes(name); err != nil {
+			return err
+		}
+		l.stateChanged()
+		return nil
 	default:
 		return userError("Unknown action.")
+	}
+	if action := r.PostFormValue("action"); action == "add" || action == "remove" {
+		// A remote added under a removed one's name may be a different
+		// server, so what was pushed to the old one says nothing about it.
+		if err := l.forgetPushes(name); err != nil {
+			return err
+		}
 	}
 	if err := writeJSON(filepath.Join(configDir(l.s.cfg.Root), remotesFile), remotes); err != nil {
 		return err
 	}
 	l.stateChanged() // push to a new remote, or newly chosen types, now
 	return nil
+}
+
+// resetPushes makes the next push mirror this deployment to a remote, for
+// "Push everything again": every file's record for it is set to differ in
+// content, priority and archive flag, so all three are sent and replace the
+// remote's. Files never pushed there keep having no record, so one archived
+// before it was ever pushed still stays here.
+func (l *localMode) resetPushes(name string) error {
+	return l.s.updateState(func(st map[string]*fileState) (bool, error) {
+		changed := false
+		for _, e := range st {
+			if rec := e.Sync[name]; rec != nil {
+				*rec = syncRecord{Archived: !e.Archived} // no hash, no priority
+				changed = true
+			}
+		}
+		return changed, nil
+	})
+}
+
+// forgetPushes drops every file's sync record for a remote, so the next
+// push treats it as new.
+func (l *localMode) forgetPushes(name string) error {
+	return l.s.updateState(func(st map[string]*fileState) (bool, error) {
+		changed := false
+		for _, e := range st {
+			if _, ok := e.Sync[name]; ok {
+				delete(e.Sync, name)
+				changed = true
+			}
+		}
+		return changed, nil
+	})
 }

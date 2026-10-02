@@ -58,6 +58,9 @@ func (m *remoteMode) canEditSettings(v *account) bool { return v != nil && v.Adm
 
 func (m *remoteMode) stateChanged() {}
 
+// pageData: remote has an account page per person, linked from the header.
+func (m *remoteMode) pageData(data map[string]any) { data["Remote"] = true }
+
 func (m *remoteMode) settingsData(r *http.Request, v *account, data map[string]any) {
 	if !m.canEditSettings(v) {
 		return

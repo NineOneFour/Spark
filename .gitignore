@@ -3,3 +3,4 @@ docker-compose.yml
 projects/
 docs/
 secret/
+.e2e/

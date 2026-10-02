@@ -69,6 +69,8 @@ type mode interface {
 	canEditSettings(v *account) bool
 	// settingsData adds the mode's own sections to the settings page.
 	settingsData(r *http.Request, v *account, data map[string]any)
+	// pageData adds what the mode needs on every page, such as header links.
+	pageData(data map[string]any)
 	// stateChanged is called after a priority or archive change.
 	stateChanged()
 }
@@ -126,15 +128,28 @@ func main() {
 	s.mode.routes(mux)
 
 	log.Printf("listening on %s in %s mode, SparkRoot is %s", cfg.Addr, cfg.Mode, cfg.Root)
-	log.Fatal(http.ListenAndServe(cfg.Addr, securityHeaders(mux)))
+	// A remote faces the Internet, so a client that opens connections and
+	// sends nothing must not hold them forever. Writes get longer than reads
+	// because failed logins wait in line behind each other.
+	srv := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           securityHeaders(mux),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      2 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+	}
+	log.Fatal(srv.ListenAndServe())
 }
 
 // render adds what every page needs (the viewer, for the header) to data.
-func (s *server) render(w http.ResponseWriter, r *http.Request, page string, data map[string]any) {
+// It takes the status so headers are set before they are sent.
+func (s *server) render(w http.ResponseWriter, r *http.Request, status int, page string, data map[string]any) {
 	data["Viewer"] = viewer(r)
-	data["Remote"] = s.cfg.Mode == "remote"
-	data["CSRF"] = s.csrf // also used by the log out button in the header
+	data["CSRF"] = s.csrfToken(viewer(r)) // also used by the log out button in the header
+	s.mode.pageData(data)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
 	if err := s.tmpl[page].ExecuteTemplate(w, "base", data); err != nil {
 		log.Printf("render %s: %v", page, err)
 	}
@@ -147,7 +162,7 @@ func (s *server) index(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Could not read the project directory. Check the server log.", http.StatusInternalServerError)
 		return
 	}
-	s.render(w, r, "index", map[string]any{"Title": "Spark", "Cards": buildCards(projects, viewer(r))})
+	s.render(w, r, http.StatusOK, "index", map[string]any{"Title": "Spark", "Cards": buildCards(projects, viewer(r))})
 }
 
 // project shows one card's files: one tab per owner, the viewer's own file
@@ -184,13 +199,12 @@ func (s *server) project(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	s.render(w, r, "project", map[string]any{
+	s.render(w, r, http.StatusOK, "project", map[string]any{
 		"Title":      selected.Name,
 		"Card":       card,
 		"Project":    selected,
 		"Tabs":       selected.Owner != "",
 		"CanEdit":    s.mode.canEdit(viewer(r), selected),
-		"CSRF":       s.csrf,
 		"Priorities": []string{"1", "2", "3", "4", "5"},
 	})
 }
@@ -283,6 +297,9 @@ func loadConfig(path string) (config, error) {
 		if !usernameRe.MatchString(cfg.Username) {
 			return config{}, fmt.Errorf("SPARK_USERNAME %q: %s", cfg.Username, usernameRule)
 		}
+		if strings.HasPrefix(cfg.Username, removedPrefix) {
+			return config{}, fmt.Errorf("SPARK_USERNAME %q: names starting with %s are kept for the files of removed people", cfg.Username, removedPrefix)
+		}
 	default:
 		return config{}, fmt.Errorf("SPARK_MODE %q: use local or remote", cfg.Mode)
 	}
@@ -307,7 +324,16 @@ func readEnvFile(path string) (map[string]string, error) {
 		if !ok {
 			return nil, fmt.Errorf("%s: invalid line %q", path, line)
 		}
-		vals[strings.TrimSpace(k)] = strings.Trim(strings.TrimSpace(v), `"'`)
+		vals[strings.TrimSpace(k)] = unquote(strings.TrimSpace(v))
 	}
 	return vals, sc.Err()
+}
+
+// unquote removes one matching pair of surrounding quotes, so a password
+// that ends in a quote keeps it.
+func unquote(v string) string {
+	if len(v) >= 2 && (v[0] == '"' || v[0] == '\'') && v[len(v)-1] == v[0] {
+		return v[1 : len(v)-1]
+	}
+	return v
 }

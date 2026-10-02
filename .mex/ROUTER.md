@@ -34,13 +34,14 @@ Then read this file fully before doing anything else in this session.
 - Skill (`skill/SKILL.md`) generates `spark.md` per `skill/format.md`; allowed types come from `Config/project_types.json`
 - Collector: `collector.py` in SparkRoot, run by cron on the host; copies to `Projects/projectName__projectType.md`, never deletes
 - Web app: card grid, per-project page, settings page (scan roots, remotes, project types, colors, archived), login (optional on local, required on remote)
+- End-to-end tests (`web/e2e/`, `patterns/run-e2e.md`): real collector, local and remote, as processes or as containers from the image. Run only when asked
 - `setup.sh` (host): skill symlink and cron line. `INSTALL.md` documents the Docker route plus a short no-Docker route
 
 **Not yet built:**
 - Phase 3 later hardening: memory/time limits when parsing pushed files (ids and size are already checked)
 - Phase 4: the richer "Spark handoff"
 - Publishing the image to Docker Hub: a later phase, not soon. Until then, build it locally (`docker build -t spark .`); docs use the name `spark`
-- Tests beyond `web/render_test.go`, and CI
+- CI, and unit tests beyond `web/render_test.go` (end-to-end tests exist: `web/e2e/run.sh`, on demand only)
 - Code-graph coverage: `.mex/graph.db` indexed 0 files at setup (Go), so the scaffold has no `grounds_to` entries
 
 **Known issues:**
