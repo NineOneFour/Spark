@@ -131,6 +131,17 @@
   </section>
 
   <section>
+    <h3>Projects per person</h3>
+    <p class="hint">The most projects each person can push here, archived ones included. Over it, a new project is refused; updates to existing ones still work. 0 means no limit.</p>
+    <form method="post" action="/settings/max-projects" class="row">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <label class="sr" for="max-projects">Projects per person</label>
+      <input id="max-projects" name="max" type="number" min="0" max="100000" value="{{.MaxProjects}}" required>
+      <button>Save</button>
+    </form>
+  </section>
+
+  <section>
     <h3>People</h3>
     <p class="hint">Invite someone by link: copy it and send it yourself. It works once, for 7 days. Removing someone ends their login and API keys. Their projects stay, under deleted-<em>name</em>, and are archived 30 days later.</p>
     {{if .InviteLink}}

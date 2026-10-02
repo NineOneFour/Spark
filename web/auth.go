@@ -50,9 +50,27 @@ type account struct {
 // apiKey is one local deployment's key. Only its SHA-256 is kept: the key is
 // 32 random bytes, so a fast hash is enough, and it is shown once.
 type apiKey struct {
-	Name    string    `json:"name"`
-	Hash    string    `json:"hash"`
-	Created time.Time `json:"created"`
+	Name     string     `json:"name"`
+	Hash     string     `json:"hash"`
+	Created  time.Time  `json:"created"`
+	LastUsed *time.Time `json:"last_used,omitempty"` // written at most every keyUseEvery
+}
+
+const (
+	keyUseEvery = time.Hour
+	// keyUnusedAfter is when the account page marks a key as unused, so
+	// keys of machines that are gone get noticed and revoked.
+	keyUnusedAfter = 90 * 24 * time.Hour
+)
+
+// Unused reports a key not used for keyUnusedAfter (counting from its
+// creation if it was never used). The account page calls it.
+func (k apiKey) Unused() bool {
+	since := k.Created
+	if k.LastUsed != nil {
+		since = *k.LastUsed
+	}
+	return time.Since(since) > keyUnusedAfter
 }
 
 // invite is a one-time signup link for a username, stored like an API key.

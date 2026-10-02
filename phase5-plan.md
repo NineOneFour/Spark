@@ -1,6 +1,6 @@
 # Phase 5 Plan: Hardening
 
-Status: designed 2026-10-01 (decisions below); steps 1–4 built 2026-10-02.
+Status: designed 2026-10-01 (decisions below); steps 1–5 built 2026-10-02.
 Decisions are also in `.mex/context/decisions.md`, under "Phase 5".
 
 ## What phase 5 is
@@ -115,7 +115,7 @@ form tokens, bcrypt, hashed keys and invites, server timeouts, per-user API scop
    subcommand, password length rules, the login form token, `security:` log lines.
 4. **Sessions** (built 2026-10-02, `web/sessions.go`): `Config/sessions.json`, idle expiry, real logout, "Log out
    everywhere", change password.
-5. **API** (about a day): per-IP penalties, per-account rate, file size and project caps, limits
+5. **API** (built 2026-10-02): per-IP penalties, per-account rate, file size and project caps, limits
    in `/api/types`, local pacing, the `http://` rule, key last use.
 6. **Tests and docs** (about half a day): unit tests for the schedule, IP parsing and sessions;
    e2e scenarios for lockout, unlock, rate and caps; `INSTALL.md` settings table and an

@@ -51,6 +51,10 @@ type config struct {
 	MinPassword  int // SPARK_MIN_PASSWORD_LENGTH, in characters
 
 	SessionIdle time.Duration // SPARK_SESSION_IDLE: a session unused this long ends
+
+	APIRate          int  // SPARK_API_RATE: valid API calls per account per minute; 0 = no limit
+	MaxFileBytes     int  // SPARK_MAX_FILE_KB, in bytes: the largest snapshot read, pushed or accepted
+	AllowHTTPRemotes bool // SPARK_ALLOW_HTTP_REMOTES: http:// remotes on any address
 }
 
 // Defaults for the settings that can be loosened, so startup can warn when
@@ -59,6 +63,8 @@ const (
 	defaultPenaltyStart = 4
 	defaultMinPassword  = 15
 	defaultSessionIdle  = 24 * time.Hour
+	defaultAPIRate      = 120
+	defaultMaxFileKB    = 128
 	// maxPasswordBytes is bcrypt's limit; it ignores anything longer.
 	maxPasswordBytes = 72
 )
@@ -276,7 +282,7 @@ var configKeys = []string{
 	"SPARK_ROOT", "SPARK_ADDR", "SPARK_MODE", "SPARK_USERNAME", "SPARK_PASSWORD",
 	"SPARK_URL", "SPARK_ALLOW_NETWORK", "SPARK_TRUSTED_PROXIES",
 	"SPARK_PENALTY_START", "SPARK_LOCKOUT_AFTER", "SPARK_LOCKOUT", "SPARK_MIN_PASSWORD_LENGTH",
-	"SPARK_SESSION_IDLE",
+	"SPARK_SESSION_IDLE", "SPARK_API_RATE", "SPARK_MAX_FILE_KB", "SPARK_ALLOW_HTTP_REMOTES",
 }
 
 // loadConfig reads the env file if one is given, then lets environment
@@ -354,6 +360,19 @@ func loadConfig(path string) (config, error) {
 			return config{}, fmt.Errorf("SPARK_SESSION_IDLE %q: use a duration of at least a minute, like 24h or 30m", v)
 		}
 	}
+	if cfg.APIRate, err = intSetting(vals, "SPARK_API_RATE", defaultAPIRate, 0, 100000); err != nil {
+		return config{}, err
+	}
+	kb, err := intSetting(vals, "SPARK_MAX_FILE_KB", defaultMaxFileKB, 1, 16384)
+	if err != nil {
+		return config{}, err
+	}
+	cfg.MaxFileBytes = kb << 10
+	if v := strings.TrimSpace(vals["SPARK_ALLOW_HTTP_REMOTES"]); v != "" {
+		if cfg.AllowHTTPRemotes, err = strconv.ParseBool(v); err != nil {
+			return config{}, fmt.Errorf("SPARK_ALLOW_HTTP_REMOTES %q: use true or false", v)
+		}
+	}
 	if (cfg.Username == "") != (cfg.Password == "") {
 		return config{}, errors.New("set both SPARK_USERNAME and SPARK_PASSWORD, or neither")
 	}
@@ -416,6 +435,9 @@ func (c config) warnLoosened() {
 	if c.PenaltyStart > defaultPenaltyStart {
 		log.Printf("SPARK_PENALTY_START is %d: failed logins wait only 2 s for the first %d (recommended %d)", c.PenaltyStart, c.PenaltyStart, defaultPenaltyStart)
 	}
+	if c.MaxFileBytes > defaultMaxFileKB<<10 {
+		log.Printf("SPARK_MAX_FILE_KB is %d: snapshots may be larger than the recommended %d KB", c.MaxFileBytes>>10, defaultMaxFileKB)
+	}
 	if c.SessionIdle > defaultSessionIdle {
 		log.Printf("SPARK_SESSION_IDLE is %v: sessions stay open longer without use than the recommended %v", c.SessionIdle, defaultSessionIdle)
 	}
@@ -430,21 +452,29 @@ func (c config) warnLoosened() {
 // runCommand runs a subcommand instead of the server, such as
 // `web unlock sam`, and returns the exit code.
 func runCommand(cfg config, args []string) int {
-	switch {
-	case args[0] == "unlock" && len(args) == 2:
-		ok, err := unlockAccount(cfg.Root, args[1])
-		switch {
-		case err != nil:
-			fmt.Fprintf(os.Stderr, "unlock: %v\n", err)
-			return 1
-		case !ok:
-			fmt.Printf("%s has no failed logins to clear\n", args[1])
-		default:
-			fmt.Printf("security: unlocked account=%q by=\"web unlock\"\n", args[1])
+	if args[0] == "unlock" {
+		ip := len(args) == 3 && (args[1] == "--ip" || args[1] == "-ip")
+		if len(args) == 2 || ip {
+			name, what := args[len(args)-1], "account"
+			if ip {
+				what = "ip"
+			}
+			ok, err := unlock(cfg.Root, ip, name)
+			switch {
+			case err != nil:
+				fmt.Fprintf(os.Stderr, "unlock: %v\n", err)
+				return 1
+			case !ok:
+				fmt.Printf("%s has no failures to clear\n", name)
+			default:
+				fmt.Printf("security: unlocked %s=%q by=\"web unlock\"\n", what, name)
+			}
+			return 0
 		}
-		return 0
 	}
-	fmt.Fprintln(os.Stderr, "usage: web [-config file]              run the server\n       web [-config file] unlock <username>   clear an account's failed logins and lock")
+	fmt.Fprintln(os.Stderr, `usage: web [-config file]                       run the server
+       web [-config file] unlock <username>      clear an account's failed logins and lock
+       web [-config file] unlock --ip <address>  clear an address's wrong API keys and lock`)
 	return 2
 }
 

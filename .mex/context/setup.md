@@ -88,6 +88,7 @@ Web (env file only via `-config`; env vars win; all optional):
 - `SPARK_ALLOW_NETWORK`: local only, default `false` (answers only to `localhost`, `127.0.0.1`, `[::1]`); warns at start when on
 - `SPARK_MIN_PASSWORD_LENGTH` (15; `SPARK_PASSWORD` shorter fails startup), `SPARK_PENALTY_START` (4), `SPARK_LOCKOUT_AFTER` (start+7), `SPARK_LOCKOUT` (on): the login penalty schedule in `web/lockout.go`; `web unlock <username>` clears `Config/lockouts.json`. Looser than default logs a warning at start
 - `SPARK_SESSION_IDLE` (24h): idle end of a server-side session (`web/sessions.go`); longer warns at start
+- `SPARK_API_RATE` (120/min per account, remote; 0 = none), `SPARK_MAX_FILE_KB` (128, both modes: `loadProjects` skips larger files, local doesn't push them, remote refuses them), `SPARK_ALLOW_HTTP_REMOTES` (false: `http://` remotes dial only private addresses)
 - `SPARK_TRUSTED_PROXIES`: addresses/ranges whose `X-Forwarded-For`/`-Proto` are believed (`web/edge.go`); default none
 
 Deployment settings (JSON in `SparkRoot/Config/`, created with defaults by the web app): `scan_roots.json`, `project_types.json`, `priority_colors.json`. See `INSTALL.md` "Settings".

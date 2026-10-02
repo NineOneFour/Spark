@@ -106,10 +106,10 @@ All settings are files in `SparkRoot/Config/`, edited on the settings page or by
 | `state.json` | Each project's priority and archive flag, set on the project page. Seeded from the snapshot the first time it's seen |
 | `remotes.json` | Local only: remotes to push to, with their API keys |
 | `accounts.json` | Login accounts (bcrypt passwords, hashed API keys), and on remote, pending invites |
-| `remote.json` | Remote only: `{"accept_all_types": true}` to accept every project type |
+| `remote.json` | Remote only: `{"accept_all_types": true}` to accept every project type; `max_projects_per_account` (default 50, `0` for no limit, also on the Settings page) caps each person's projects, archived ones included |
 | `session_key.json` | Derives the form tokens that stop cross-site posts |
 | `sessions.json` | Open login sessions (only hashes of their ids). To log everyone out, stop Spark, delete it, and start Spark |
-| `lockouts.json` | Failed logins per account. Cleared by a correct password or `web unlock` (see [Locked out](#locked-out)) |
+| `lockouts.json` | Failed logins per account, and wrong API keys per address. Cleared by a correct password or key, or by `web unlock` (see [Locked out](#locked-out)) |
 
 The web app creates any missing file with its defaults on start. A snapshot whose `project_type` isn't listed is hidden.
 
@@ -118,9 +118,12 @@ The web app creates any missing file with its defaults on start. A snapshot whos
 | `SPARK_MODE` | `local` | `remote` for a team server (see [Sharing with a team](#sharing-with-a-team)) |
 | `SPARK_USERNAME`, `SPARK_PASSWORD` | unset | Set both (`-e SPARK_USERNAME=me -e SPARK_PASSWORD=...`) to require login. Leave both unset for no login. Required on remote, where this is the admin; the username uses lowercase letters, digits and hyphens. Spark won't start if the password is shorter than `SPARK_MIN_PASSWORD_LENGTH` |
 | `SPARK_MIN_PASSWORD_LENGTH` | `15` | Shortest password allowed, in characters, for `SPARK_PASSWORD` and new passwords. At most 72 bytes either way. Existing shorter passwords keep working until changed |
-| `SPARK_PENALTY_START` | `4` | Failed logins per account that wait 2 seconds each. The next waits 30 seconds, then 1, 2, 4, 8, 16 and 32 minutes. `0` means 2 seconds every time. An attempt during a wait isn't checked or counted |
+| `SPARK_PENALTY_START` | `4` | Failed logins per account (and wrong API keys per address) that wait 2 seconds each. The next waits 30 seconds, then 1, 2, 4, 8, 16 and 32 minutes. `0` means 2 seconds every time. An attempt during a wait isn't checked or counted |
 | `SPARK_LOCKOUT_AFTER` | start + 7 (`11`) | The failed login that locks the account until `web unlock`. No lock by default when the start is `0`. Example: five tries 2 seconds apart, then locked: `SPARK_PENALTY_START=0`, `SPARK_LOCKOUT_AFTER=5` |
 | `SPARK_LOCKOUT` | `on` | `off`: failed logins only wait, never lock |
+| `SPARK_API_RATE` | `120` | Remote: valid API calls per person per minute; over it, "too many requests". `0` means no limit. Locals pace themselves to the remote's limit |
+| `SPARK_MAX_FILE_KB` | `128` | Largest snapshot, in KB: bigger files aren't shown, pushed, or accepted by a remote |
+| `SPARK_ALLOW_HTTP_REMOTES` | `false` | Local: `http://` remotes work only on private addresses (localhost, `10.x`, `172.16–31.x`, `192.168.x`, Tailscale `100.64–127.x`). `true` allows any |
 | `SPARK_SESSION_IDLE` | `24h` | A login session ends after this long without use (a Go duration: `30m`, `8h`). Sessions also end 30 days after login |
 | `SPARK_ADDR` | `:8080` | Listen address inside the container |
 | `SPARK_URL` | unset | The address people open, like `https://spark.example.com`. Strongly recommended on a remote that faces the Internet. When set, Spark answers only to that host name, and invite links, the cross-site check, the Secure cookie flag and HSTS (for `https`) come from it |
@@ -128,7 +131,7 @@ The web app creates any missing file with its defaults on start. A snapshot whos
 | `SPARK_TRUSTED_PROXIES` | unset | Addresses or ranges of your HTTPS proxy, separated by commas, like `172.17.0.1` or `172.16.0.0/12`. Spark believes `X-Forwarded-For` and `X-Forwarded-Proto` only from these |
 | `SPARK_ROOT` | `/spark` | SparkRoot inside the container |
 
-Spark logs a warning at start for each setting looser than its default, and runs anyway. Security events (logins, lockouts, keys, invites, removed accounts) go to the normal log as lines starting `security:`, with the account and the client's address.
+Spark logs a warning at start for each setting looser than its default, and runs anyway. Security events (logins, lockouts, password changes, keys, invites, removed accounts, wrong API keys, API throttling and blocked addresses) go to the normal log as lines starting `security:`, with the account and the client's address.
 
 ### Locked out
 
@@ -139,6 +142,8 @@ docker exec spark web unlock <username>
 ```
 
 Without Docker, run `./web/web unlock <username>` with the same settings as the server. A correct password also clears the count once any wait is over.
+
+Wrong API keys count per address the same way. A blocked address gets "this address is blocked"; clear it with `web unlock --ip <address>`.
 
 ## Updating
 

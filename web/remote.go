@@ -8,20 +8,41 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 )
 
 // remoteMode is a hosted, multi-user deployment. Local deployments push
 // snapshots to it (remote_api.go), tagged with the pushing key's username;
 // people log in with accounts the admin invites (remote_accounts.go).
 type remoteMode struct {
-	s *server
+	s    *server
+	rate *rateLimiter // valid API calls per account
 }
 
 func newRemoteMode(s *server) *remoteMode {
+	m := &remoteMode{s: s, rate: newRateLimiter()}
 	if s.cfg.URL == nil {
 		log.Printf("SPARK_URL is not set: any host name is accepted, and invite links and the cross-site check follow the request's Host header. Set it before exposing this remote to the Internet")
 	}
-	return &remoteMode{s: s}
+	switch {
+	case s.cfg.APIRate == 0:
+		log.Printf("SPARK_API_RATE is 0: API calls per account are not limited")
+	case s.cfg.APIRate > defaultAPIRate:
+		log.Printf("SPARK_API_RATE is %d: more API calls per account than the recommended %d a minute", s.cfg.APIRate, defaultAPIRate)
+	}
+	warnMaxProjects(m.maxProjects())
+	return m
+}
+
+// warnMaxProjects logs a project cap looser than the default.
+func warnMaxProjects(n int) {
+	switch {
+	case n == 0:
+		log.Printf("%s: projects per account are not limited", remoteSettingsFile)
+	case n > defaultMaxProjects:
+		log.Printf("%s: %d projects per account, more than the recommended %d", remoteSettingsFile, n, defaultMaxProjects)
+	}
 }
 
 // hostAllowed: a remote is meant to be reached over the network, so without
@@ -31,6 +52,7 @@ func (m *remoteMode) hostAllowed(string) bool { return true }
 func (m *remoteMode) routes(mux *http.ServeMux) {
 	s := m.s
 	mux.HandleFunc("POST /settings/accept-types", s.auth.require(s.updateSettings(m.changeAcceptTypes)))
+	mux.HandleFunc("POST /settings/max-projects", s.auth.require(s.updateSettings(m.changeMaxProjects)))
 	mux.HandleFunc("POST /settings/invites", s.auth.require(m.changeInvites))
 	mux.HandleFunc("POST /settings/accounts", s.auth.require(s.updateSettings(m.changeAccounts)))
 	mux.HandleFunc("GET /account", s.auth.require(m.account))
@@ -83,6 +105,7 @@ func (m *remoteMode) settingsData(r *http.Request, v *account, data map[string]a
 	sort.Slice(accounts, func(i, j int) bool { return accounts[i].Username < accounts[j].Username })
 	data["RemoteAdmin"] = true
 	data["AcceptAll"] = m.acceptAll()
+	data["MaxProjects"] = m.maxProjects()
 	data["Accounts"] = accounts
 	data["Invites"] = d.Invites
 	data["FirstAdmin"] = m.s.cfg.Username
@@ -90,23 +113,51 @@ func (m *remoteMode) settingsData(r *http.Request, v *account, data map[string]a
 
 // remoteSettingsFile holds remote-only settings. A remote accepts the types
 // in project_types.json, or every type when accept_all_types is set (types
-// not in the list then get a neutral color).
+// still need a valid name). max_projects_per_account caps each account's
+// files, archived ones included; unset means defaultMaxProjects, 0 no limit.
 const remoteSettingsFile = "remote.json"
+
+const defaultMaxProjects = 50
 
 type remoteSettings struct {
 	AcceptAllTypes bool `json:"accept_all_types"`
+	MaxProjects    *int `json:"max_projects_per_account,omitempty"`
 }
 
-func (m *remoteMode) acceptAll() bool {
+func (m *remoteMode) settings() remoteSettings {
 	var rs remoteSettings
 	err := readJSON(filepath.Join(configDir(m.s.cfg.Root), remoteSettingsFile), &rs)
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		reportInvalid(remoteSettingsFile, err)
 	}
-	return rs.AcceptAllTypes
+	return rs
+}
+
+func (m *remoteMode) acceptAll() bool { return m.settings().AcceptAllTypes }
+
+func (m *remoteMode) maxProjects() int {
+	if n := m.settings().MaxProjects; n != nil && *n >= 0 {
+		return *n
+	}
+	return defaultMaxProjects
 }
 
 func (m *remoteMode) changeAcceptTypes(r *http.Request) error {
-	rs := remoteSettings{AcceptAllTypes: r.PostFormValue("all") == "on"}
+	rs := m.settings()
+	rs.AcceptAllTypes = r.PostFormValue("all") == "on"
 	return writeJSON(filepath.Join(configDir(m.s.cfg.Root), remoteSettingsFile), rs)
+}
+
+func (m *remoteMode) changeMaxProjects(r *http.Request) error {
+	n, err := strconv.Atoi(strings.TrimSpace(r.PostFormValue("max")))
+	if err != nil || n < 0 || n > 100000 {
+		return userError("Use a whole number of projects, or 0 for no limit.")
+	}
+	rs := m.settings()
+	rs.MaxProjects = &n
+	if err := writeJSON(filepath.Join(configDir(m.s.cfg.Root), remoteSettingsFile), rs); err != nil {
+		return err
+	}
+	warnMaxProjects(n)
+	return nil
 }

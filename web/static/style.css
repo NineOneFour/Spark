@@ -473,7 +473,8 @@ code {
 .settings input:not([type]),
 .settings input[type="text"],
 .settings input[type="url"],
-.settings input[type="password"] {
+.settings input[type="password"],
+.settings input[type="number"] {
   flex: 1;
   min-width: 10rem;
   padding: 0.5rem 0.75rem;

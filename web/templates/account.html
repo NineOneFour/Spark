@@ -24,7 +24,7 @@
         <form method="post" action="/account/keys" class="row">
           <input type="hidden" name="csrf" value="{{$.CSRF}}">
           <input type="hidden" name="name" value="{{.Name}}">
-          <span class="row-name">{{.Name}} <span class="hint-inline">made {{date .Created}}</span></span>
+          <span class="row-name">{{.Name}} <span class="hint-inline">made {{date .Created}}, {{with .LastUsed}}last used {{date .}}{{else}}never used{{end}}{{if .Unused}} · unused for 90 days: revoke it if that machine is gone{{end}}</span></span>
           <button name="action" value="revoke" class="quiet">Revoke</button>
         </form>
       </li>

@@ -105,6 +105,11 @@ func (s *server) loadProjects() ([]*Project, error) {
 			reportInvalid(name, errors.New("filename does not match this mode's naming scheme"))
 			continue
 		}
+		// Every page reparses every file, so a huge one would slow them all.
+		if info, err := e.Info(); err == nil && info.Size() > int64(s.cfg.MaxFileBytes) {
+			reportInvalid(name, fmt.Errorf("larger than %d KB (SPARK_MAX_FILE_KB)", s.cfg.MaxFileBytes>>10))
+			continue
+		}
 		raw, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			reportInvalid(name, err)

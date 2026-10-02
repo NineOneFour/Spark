@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -119,18 +120,25 @@ func newTeam(t *testing.T) *team {
 }
 
 // push sends demo to remote's sync API under id, as a local would, and
-// returns the status.
+// returns the status. A local whose key was removed shares this address and
+// makes it wait briefly, so a 429 is retried after the time it names.
 func push(t *testing.T, remote *spark, key, id string) int {
 	t.Helper()
 	body, _ := json.Marshal(map[string]string{"content": demo})
-	req, _ := http.NewRequest(http.MethodPut, remote.url+"/api/files/"+id, bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer "+key)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatal(err)
+	for try := 0; ; try++ {
+		req, _ := http.NewRequest(http.MethodPut, remote.url+"/api/files/"+id, bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+key)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusTooManyRequests || try == 3 {
+			return resp.StatusCode
+		}
+		wait, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+		time.Sleep(time.Duration(wait) * time.Second)
 	}
-	resp.Body.Close()
-	return resp.StatusCode
 }
 
 func TestCollectorMakesCard(t *testing.T) {

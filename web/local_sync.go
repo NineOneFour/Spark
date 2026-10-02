@@ -5,15 +5,19 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -37,7 +41,89 @@ type syncRecord struct {
 	RemoteSet time.Time `json:"remote_set"` // the remote's priority_set we last saw
 }
 
-var syncClient = &http.Client{Timeout: 15 * time.Second}
+var (
+	syncClient = &http.Client{Timeout: 15 * time.Second, CheckRedirect: noRedirects}
+	// privateClient is for http:// remotes. It dials only private addresses,
+	// checked after DNS, so an API key never crosses the Internet in the
+	// clear (SPARK_ALLOW_HTTP_REMOTES lifts this).
+	privateClient = &http.Client{
+		Timeout:       15 * time.Second,
+		CheckRedirect: noRedirects,
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{Timeout: 10 * time.Second, Control: dialPrivateOnly}).DialContext,
+		},
+	}
+)
+
+// noRedirects keeps the key on the URL it was set up for; a redirect is
+// reported instead of followed.
+func noRedirects(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+// cgnat is the shared address range Tailscale uses.
+var cgnat = netip.MustParsePrefix("100.64.0.0/10")
+
+// isPrivateAddr: loopback, the private ranges (10/8, 172.16/12, 192.168/16,
+// fc00::/7), and Tailscale's 100.64/10.
+func isPrivateAddr(ip netip.Addr) bool {
+	ip = ip.Unmap()
+	return ip.IsLoopback() || ip.IsPrivate() || cgnat.Contains(ip)
+}
+
+func dialPrivateOnly(network, address string, _ syscall.RawConn) error {
+	ap, err := netip.ParseAddrPort(address)
+	if err != nil {
+		return err
+	}
+	if !isPrivateAddr(ap.Addr()) {
+		return fmt.Errorf("%s is not a private address: use https://, or set SPARK_ALLOW_HTTP_REMOTES=true to allow http:// anywhere", ap.Addr())
+	}
+	return nil
+}
+
+func (l *localMode) client(rc remoteConfig) *http.Client {
+	if strings.HasPrefix(rc.URL, "http://") && !l.s.cfg.AllowHTTPRemotes {
+		return privateClient
+	}
+	return syncClient
+}
+
+// limitsEvery is how often a remote is asked for its limits again.
+const limitsEvery = 15 * time.Minute
+
+type remoteLimits struct {
+	apiLimits
+	fetched time.Time
+}
+
+// limitsFor returns a remote's limits, asking it at most every limitsEvery.
+// A remote that states none (an older one) or can't be reached gets this
+// deployment's own defaults.
+func (l *localMode) limitsFor(rc remoteConfig) apiLimits {
+	if c, ok := l.limits[rc.Name]; ok && time.Since(c.fetched) < limitsEvery {
+		return c.apiLimits
+	}
+	lim := apiLimits{RatePerMinute: defaultAPIRate, MaxFileBytes: l.s.cfg.MaxFileBytes}
+	l.pace(rc.Name, lim.RatePerMinute)
+	if t, err := l.fetchRemoteTypes(rc); err == nil && t.Limits != nil {
+		lim = *t.Limits
+	}
+	l.limits[rc.Name] = remoteLimits{lim, time.Now()}
+	return lim
+}
+
+// pace waits so calls to one remote stay under its rate, evenly spread: a
+// 300-file resync at 120 a minute takes about 2½ minutes.
+func (l *localMode) pace(name string, perMinute int) {
+	if perMinute <= 0 {
+		return
+	}
+	now := time.Now()
+	if next := l.nextCall[name]; next.After(now) {
+		time.Sleep(next.Sub(now))
+		now = next
+	}
+	l.nextCall[name] = now.Add(time.Minute / time.Duration(perMinute))
+}
 
 func (l *localMode) syncLoop() {
 	push := time.NewTicker(pushEvery)
@@ -88,6 +174,12 @@ func (l *localMode) push() {
 		return
 	}
 	records := l.records()
+	limits := map[string]apiLimits{}
+	for _, rc := range remotes {
+		limits[rc.Name] = l.limitsFor(rc)
+	}
+	// stopped holds remotes that said "too many requests" this round.
+	stopped := map[string]bool{}
 
 	for _, p := range projects {
 		raw, err := os.ReadFile(filepath.Join(l.s.cfg.Root, "Projects", p.ID+".md"))
@@ -98,9 +190,10 @@ func (l *localMode) push() {
 		hash := hex.EncodeToString(sum[:])
 
 		for _, rc := range remotes {
-			if !slices.Contains(rc.Types, p.Type) {
+			if !slices.Contains(rc.Types, p.Type) || stopped[rc.Name] {
 				continue
 			}
+			lim := limits[rc.Name]
 			label := fmt.Sprintf("push of %s to %s", p.ID, rc.Name)
 			rec, pushed := records[p.ID][rc.Name]
 			if !pushed && p.Archived {
@@ -109,8 +202,8 @@ func (l *localMode) push() {
 			if pushed && rec.Hash == hash && rec.Priority == p.Priority && rec.Archived == p.Archived {
 				continue
 			}
-			if len(raw) > maxPush {
-				reportInvalid(label, fmt.Errorf("larger than %d bytes", maxPush))
+			if len(raw) > lim.MaxFileBytes {
+				reportInvalid(label, fmt.Errorf("larger than %s's limit of %d KB", rc.Name, lim.MaxFileBytes>>10))
 				continue
 			}
 
@@ -122,8 +215,13 @@ func (l *localMode) push() {
 				req.Archived = &p.Archived
 			}
 			var resp pushResponse
-			err := callRemote(rc, http.MethodPut, "/api/files/"+url.PathEscape(p.ID), req, &resp)
+			l.pace(rc.Name, lim.RatePerMinute)
+			err := l.callRemote(rc, http.MethodPut, "/api/files/"+url.PathEscape(p.ID), req, &resp)
 			reportInvalid(label, err)
+			var ae *apiError
+			if errors.As(err, &ae) && ae.status == http.StatusTooManyRequests {
+				stopped[rc.Name] = true // the next round tries again
+			}
 			if err != nil {
 				continue
 			}
@@ -161,7 +259,8 @@ func (l *localMode) pull() {
 	reportInvalid(remotesFile, err)
 	for _, rc := range remotes {
 		var got map[string]priorityEntry
-		err := callRemote(rc, http.MethodGet, "/api/priorities", nil, &got)
+		l.pace(rc.Name, l.limitsFor(rc).RatePerMinute)
+		err := l.callRemote(rc, http.MethodGet, "/api/priorities", nil, &got)
 		reportInvalid("priorities from "+rc.Name, err)
 		if err != nil {
 			continue
@@ -194,14 +293,22 @@ func (l *localMode) pull() {
 
 // fetchRemoteTypes asks a remote which project types it accepts. It also
 // proves the URL and key work.
-func fetchRemoteTypes(rc remoteConfig) (typesResponse, error) {
+func (l *localMode) fetchRemoteTypes(rc remoteConfig) (typesResponse, error) {
 	var t typesResponse
-	err := callRemote(rc, http.MethodGet, "/api/types", nil, &t)
+	err := l.callRemote(rc, http.MethodGet, "/api/types", nil, &t)
 	return t, err
 }
 
+// apiError is a remote's answer other than success.
+type apiError struct {
+	status int
+	msg    string
+}
+
+func (e *apiError) Error() string { return e.msg }
+
 // callRemote sends one API call. body and out are JSON; either may be nil.
-func callRemote(rc remoteConfig, method, path string, body, out any) error {
+func (l *localMode) callRemote(rc remoteConfig, method, path string, body, out any) error {
 	var rd io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -218,22 +325,24 @@ func callRemote(rc remoteConfig, method, path string, body, out any) error {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := syncClient.Do(req)
+	resp, err := l.client(rc).Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
-		return fmt.Errorf("the remote rejected the API key")
+		return &apiError{resp.StatusCode, "the remote rejected the API key"}
+	case resp.StatusCode/100 == 3:
+		return &apiError{resp.StatusCode, fmt.Sprintf("%s: the remote redirects to %s; use that URL", resp.Status, resp.Header.Get("Location"))}
 	case resp.StatusCode/100 != 2:
 		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 300))
-		return fmt.Errorf("%s: %s", resp.Status, strings.TrimSpace(string(msg)))
+		return &apiError{resp.StatusCode, fmt.Sprintf("%s: %s", resp.Status, strings.TrimSpace(string(msg)))}
 	}
 	if out == nil {
 		return nil
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxPush)).Decode(out); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxReply)).Decode(out); err != nil {
 		return fmt.Errorf("unexpected reply: %w", err)
 	}
 	return nil

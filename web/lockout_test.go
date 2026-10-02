@@ -157,7 +157,7 @@ func TestLockouts(t *testing.T) {
 	if d.Accounts["sam"] == nil || d.Accounts["nobody"] != nil || d.Accounts["lee"] != nil {
 		t.Errorf("lockouts.json: %s", data)
 	}
-	if ok, err := unlockAccount(root, "sam"); !ok || err != nil {
+	if ok, err := unlock(root, false, "sam"); !ok || err != nil {
 		t.Fatalf("unlock: %v %v", ok, err)
 	}
 	if v, _ := l.begin("sam", true); !v.ok {

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 )
 
 // localMode is a deployment on one person's machine: the collector fills
@@ -18,6 +19,10 @@ import (
 type localMode struct {
 	s    *server
 	kick chan struct{} // asks the sync loop to push now
+
+	// Used by the sync loop only.
+	limits   map[string]remoteLimits // by remote name
+	nextCall map[string]time.Time    // by remote name: when pace lets the next call go
 }
 
 func newLocalMode(s *server) (*localMode, error) {
@@ -32,7 +37,10 @@ func newLocalMode(s *server) (*localMode, error) {
 			log.Printf("SPARK_ALLOW_NETWORK is on: answering to any host name, not only localhost")
 		}
 	}
-	l := &localMode{s: s, kick: make(chan struct{}, 1)}
+	if s.cfg.AllowHTTPRemotes {
+		log.Printf("SPARK_ALLOW_HTTP_REMOTES is on: API keys may travel unencrypted to http:// remotes on any address")
+	}
+	l := &localMode{s: s, kick: make(chan struct{}, 1), limits: map[string]remoteLimits{}, nextCall: map[string]time.Time{}}
 	go l.syncLoop()
 	return l, nil
 }
@@ -193,7 +201,7 @@ func (l *localMode) changeRemotes(r *http.Request) error {
 		if u, err := url.Parse(rc.URL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 			return userError("The URL must start with https:// (or http://).")
 		}
-		if _, err := fetchRemoteTypes(rc); err != nil {
+		if _, err := l.fetchRemoteTypes(rc); err != nil {
 			return userError(fmt.Sprintf("Could not connect to %s: %v", rc.URL, err))
 		}
 		remotes = append(remotes, rc)
@@ -211,7 +219,7 @@ func (l *localMode) changeRemotes(r *http.Request) error {
 			}
 		}
 		if len(added) > 0 {
-			accepted, err := fetchRemoteTypes(remotes[i])
+			accepted, err := l.fetchRemoteTypes(remotes[i])
 			if err != nil {
 				return userError(fmt.Sprintf("Could not reach %s to check its project types: %v", name, err))
 			}
