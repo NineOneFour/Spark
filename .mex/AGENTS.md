@@ -22,7 +22,7 @@ A project-memory dashboard: an agent skill writes `spark.md` snapshots, a Python
 - Snapshot content is untrusted: keep goldmark's default HTML escaping, bluemonday on every render, and the CSP header
 
 ## Commands
-One Go module (`web/`, Go 1.27+) and one Python script (`collector/collector.py`, stdlib); one Go unit test file (`web/render_test.go`):
+One Go module (`web/`, Go 1.27+) and one Python script (`collector/collector.py`, stdlib); Go unit tests in `web/*_test.go`:
 - Build web: `(cd web && go build -o web .)`
 - Check: `go vet ./...`, `gofmt -l .` and `go test ./...` in `web/`; `python3 -m py_compile collector/collector.py`
 - No local Go? Run them in `golang:1.27.1` with `docker run --rm -u $(id -u):$(id -g) -e GOCACHE=/tmp/gocache -e GOPATH=/tmp/gopath -v "$PWD/web":/src -w /src golang:1.27.1 ...`

@@ -94,6 +94,19 @@ From then on, local pushes a project within a minute of its content, priority or
 
 If a remote loses its files, **Push everything again** next to it mirrors this machine to it: every project it has ever sent there, plus any new ones, goes again with its content, priority and archive flag, replacing the remote's. A project archived before it was ever pushed stays local.
 
+### On the Internet
+
+A remote that anyone can reach needs a few things Spark can't do for you. Its defaults are already strict (password length, login and API-key penalties, rate and size limits); this list is the rest.
+
+1. **HTTPS in front.** Run a proxy such as Caddy on the server and keep Spark's port on `127.0.0.1` (`-p 127.0.0.1:8080:8080`), so the proxy is the only way in.
+2. **`SPARK_URL`** set to the address people open. Spark then refuses other host names, builds invite links from it, marks cookies Secure and sends HSTS.
+3. **`SPARK_TRUSTED_PROXIES`** set to the proxy's address as Spark sees it, so penalties count the real client's address, not the proxy's. If unsure, start without it and look for `security: ignoring proxy headers from ...` in the log.
+4. **A long admin password** (at least 15 characters; Spark won't start with less).
+5. **Read the security log now and then:** `docker logs spark-remote 2>&1 | grep security:`. Unlock people with `web unlock` (see [Locked out](#locked-out)).
+6. **Keep the image current:** rebuild it from a fresh checkout when Spark updates (see [Updating](#updating)).
+
+Every limit can be loosened with the settings below; Spark logs a warning at start for each one that is.
+
 ## Settings
 
 All settings are files in `SparkRoot/Config/`, edited on the settings page or by hand:

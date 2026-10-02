@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -124,21 +126,35 @@ func newTeam(t *testing.T) *team {
 // makes it wait briefly, so a 429 is retried after the time it names.
 func push(t *testing.T, remote *spark, key, id string) int {
 	t.Helper()
-	body, _ := json.Marshal(map[string]string{"content": demo})
 	for try := 0; ; try++ {
-		req, _ := http.NewRequest(http.MethodPut, remote.url+"/api/files/"+id, bytes.NewReader(body))
-		req.Header.Set("Authorization", "Bearer "+key)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatal(err)
+		r := send(t, remote, key, id, demo)
+		if r.status != http.StatusTooManyRequests || try == 3 {
+			return r.status
 		}
-		resp.Body.Close()
-		if resp.StatusCode != http.StatusTooManyRequests || try == 3 {
-			return resp.StatusCode
-		}
-		wait, _ := strconv.Atoi(resp.Header.Get("Retry-After"))
+		wait, _ := strconv.Atoi(r.retryAfter)
 		time.Sleep(time.Duration(wait) * time.Second)
 	}
+}
+
+type apiReply struct {
+	status     int
+	body       string
+	retryAfter string
+}
+
+// send makes one push of content under id, with no retry.
+func send(t *testing.T, remote *spark, key, id, content string) apiReply {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"content": content})
+	req, _ := http.NewRequest(http.MethodPut, remote.url+"/api/files/"+id, bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer "+key)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	return apiReply{resp.StatusCode, string(data), resp.Header.Get("Retry-After")}
 }
 
 func TestCollectorMakesCard(t *testing.T) {
@@ -363,4 +379,75 @@ func TestFormTokenIsPerUser(t *testing.T) {
 	expect(t, invite(samToken, remote.url), http.StatusForbidden, "admin posting sam's token")
 	expect(t, invite(adminToken, "http://evil.example"), http.StatusForbidden, "cross-site post")
 	expect(t, invite(adminToken, remote.url), http.StatusOK, "admin's own token")
+}
+
+// Failed logins lock an account; while locked even the right password is
+// refused, until the operator runs web unlock.
+func TestLoginLockoutAndUnlock(t *testing.T) {
+	remote := startSpark(t, "remote", "SPARK_MODE=remote", "SPARK_USERNAME=admin", "SPARK_PASSWORD="+adminPass,
+		"SPARK_PENALTY_START=0", "SPARK_LOCKOUT_AFTER=2")
+	c := remote.client()
+	try := func(pass string) reply {
+		return c.submit("/login", "/login", url.Values{"username": {"admin"}, "password": {pass}})
+	}
+	expect(t, try("wrong-password-one"), http.StatusUnauthorized, "first wrong password")
+	expect(t, try(adminPass), http.StatusTooManyRequests, "right password during the 2 s wait")
+	time.Sleep(2100 * time.Millisecond)
+	r := try("wrong-password-two")
+	expect(t, r, http.StatusUnauthorized, "second wrong password")
+	contains(t, r, "locked", "second wrong password")
+	time.Sleep(2100 * time.Millisecond)
+	expect(t, try(adminPass), http.StatusTooManyRequests, "right password while locked")
+	if !strings.Contains(remote.logs(), `security: account locked account="admin"`) {
+		t.Error("no security line for the lockout")
+	}
+
+	if out := remote.command("unlock", "admin"); !strings.Contains(out, "unlocked") {
+		t.Fatalf("web unlock: %s", out)
+	}
+	expect(t, try(adminPass), http.StatusSeeOther, "right password after unlock")
+}
+
+// Wrong API keys block the address until web unlock --ip; then valid calls
+// are rate limited per account, large files refused, and new projects over
+// the cap refused while updates still work.
+func TestAPILimits(t *testing.T) {
+	remote := startSpark(t, "remote", "SPARK_MODE=remote", "SPARK_USERNAME=admin", "SPARK_PASSWORD="+adminPass,
+		"SPARK_PENALTY_START=0", "SPARK_LOCKOUT_AFTER=1", "SPARK_API_RATE=4", "SPARK_MAX_FILE_KB=1")
+	_, key := join(t, remote)
+	admin := remote.client()
+	admin.login("admin", adminPass)
+	expect(t, admin.submit("/settings", "/settings/max-projects", url.Values{"max": {"1"}}), http.StatusSeeOther, "set the project cap")
+
+	// One wrong key blocks the address, even for the right key.
+	if r := send(t, remote, "spk_wrong", demoID, demo); r.status != http.StatusUnauthorized {
+		t.Fatalf("wrong key: got %d, want 401", r.status)
+	}
+	r := send(t, remote, key, demoID, demo)
+	m := regexp.MustCompile(`web unlock --ip (\S+)`).FindStringSubmatch(r.body)
+	if r.status != http.StatusForbidden || m == nil {
+		t.Fatalf("right key from a blocked address: %d %s", r.status, r.body)
+	}
+	if !strings.Contains(remote.logs(), "security: api ip blocked") {
+		t.Error("no security line for the blocked address")
+	}
+	remote.command("unlock", "--ip", m[1])
+
+	// Four calls a minute: three pushes and an update, then the fifth is refused.
+	other := strings.Replace(demo, "E2E Demo", "E2E Other", 1)
+	for _, step := range []struct {
+		id, content string
+		want        int
+		what        string
+	}{
+		{demoID, demo, http.StatusOK, "push after unlock"},
+		{demoID, demo + strings.Repeat("x", 2048), http.StatusRequestEntityTooLarge, "file over 1 KB"},
+		{"e2eOther__sideProject", other, http.StatusConflict, "second project over a cap of 1"},
+		{demoID, demo, http.StatusOK, "update over the cap"},
+		{demoID, demo, http.StatusTooManyRequests, "fifth call in a minute"},
+	} {
+		if r := send(t, remote, key, step.id, step.content); r.status != step.want {
+			t.Fatalf("%s: got %d, want %d: %s", step.what, r.status, step.want, r.body)
+		}
+	}
 }

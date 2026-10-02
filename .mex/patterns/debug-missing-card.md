@@ -15,7 +15,7 @@ edges:
   - target: patterns/change-snapshot-format.md
     condition: when the cause is a format mismatch that needs a code or spec change
 grounds_to: []
-last_updated: 2026-10-01
+last_updated: 2026-10-02
 mex:
   id: mx_01M3QT592371G6KZQ0CGJ65X5K
   type: pattern
@@ -49,6 +49,9 @@ There are three boundaries, each with its own log: the collector on the host (`S
 - Removing a type on the settings page hides every snapshot of that type.
 - `last_updated` without a UTC offset fails `time.RFC3339` parsing, so the card disappears.
 - Missing on a remote only: the remote rejects a push whose id isn't the collector's name for the snapshot (`camelCase(project)__camelCase(project_type)`), so a hand-named file in local `Projects/` never arrives. The local web log shows `push of <id> to <remote>: 422 ... does not match the snapshot`.
+- A snapshot over `SPARK_MAX_FILE_KB` (128 KB) is skipped: the web log shows `skipping <file>: larger than 128 KB`, local doesn't push it, and a remote answers 413.
+- Missing on a remote only, new project: over the account's project cap the push gets `409 ... already has N projects`; updates to existing ones still arrive. Raise it under Settings → Projects per person.
+- Missing on a remote only, `http://` URL: local dials `http://` remotes only on private addresses (`... is not a private address`); use `https://` or `SPARK_ALLOW_HTTP_REMOTES=true`.
 - The container refuses to start if `/spark` isn't writable: Docker created the host folder as root, or `--user` is missing.
 
 ## Verify

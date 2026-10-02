@@ -166,6 +166,25 @@ func (s *spark) remove() {
 	}
 }
 
+// command runs a web subcommand against this Spark's SparkRoot, the way an
+// operator would (`docker exec <name> web ...` with the image), and returns
+// its output.
+func (s *spark) command(args ...string) string {
+	s.t.Helper()
+	var cmd *exec.Cmd
+	if *image == "" {
+		cmd = exec.Command(*webBin, args...)
+		cmd.Env = append(hostEnv(), s.env...)
+	} else {
+		cmd = exec.Command("docker", append([]string{"exec", s.name, "web"}, args...)...)
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		s.t.Fatalf("web %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return string(out)
+}
+
 func (s *spark) logs() string {
 	if *image == "" {
 		if s.out == nil {

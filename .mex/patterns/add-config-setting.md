@@ -13,7 +13,7 @@ edges:
   - target: context/conventions.md
     condition: for the config-loading pattern and verify checklist
 grounds_to: []
-last_updated: 2026-10-01
+last_updated: 2026-10-02
 mex:
   id: mx_01M3QT591CME72XWHMVWM94MNV
   type: pattern
@@ -54,6 +54,8 @@ There are two kinds of setting:
 - The web app does not expand `~` in env values; the collector expands `~` in `scan_roots.json` on the host.
 - Anything written into generated CSS (`/colors.css`) must be held to a strict pattern (`typeNameRe`, `colorRe`), not escaped.
 - Paired settings (like username/password) should fail fast in `loadConfig`.
+- A security limit needs a safe default and a startup warning when set looser: `warnLoosened` in `web/main.go` for process settings, the mode's constructor for mode-only ones (`newLocalMode`, `newRemoteMode`). Use `intSetting` for whole numbers.
+- Add a setting with the step that uses it; an unused setting is dead config.
 
 ## Verify
 - [ ] Process setting: works from the env file and from an env var, and the env var wins; default applies when unset

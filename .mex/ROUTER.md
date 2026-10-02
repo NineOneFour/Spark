@@ -31,6 +31,7 @@ Then read this file fully before doing anything else in this session.
 - Phase 3 is built (2026-10-01, `phase3-plan.md`): `SPARK_MODE=local|remote`. Local pushes snapshots to remotes by project type (60s hash poll, plus at once on priority/archive changes) and pulls priorities every 15 minutes. Remote: invite-only accounts, per-machine API keys, one card per `project__type` with a tab per user
 - Priority and archive live in `Config/state.json`; the project page edits them, Settings → Archived unarchives
 - Phase 2 (2026-10-01): one Docker image owns SparkRoot (`Projects/`, `Skill/`, `Config/`) and fills it on every start
+- Phase 5 is built (2026-10-02, `phase5-plan.md`): hardening against OWASP Top 10:2025 and the API Security Top 10. Go 1.27.1/Alpine 3.24.2 pinned; `web/edge.go` (`SPARK_URL` host check, localhost-only local unless `SPARK_ALLOW_NETWORK`, `SPARK_TRUSTED_PROXIES`, CSP/HSTS, `security:` log lines); bundled fonts; login penalties and lockouts (`web/lockout.go`, `web unlock`); 15-character passwords; server-side sessions (`web/sessions.go`); API per-IP penalties, rate, file and project caps with local pacing; `http://` remotes private-only; key last use
 - Phase 4 is built (2026-10-01): the Spark Handoff skill (`handoff-skill/`, "Spark, handoff") writes `handoff.md` for a new owner, per `handoff-skill/format.md`. Shipped to `SparkRoot/HandoffSkill/`, linked by `setup.sh` as `~/.claude/skills/spark-handoff`
 - Skill (`skill/SKILL.md`) generates `spark.md` per `skill/format.md`; allowed types come from `Config/project_types.json`
 - Collector: `collector.py` in SparkRoot, run by cron on the host; copies to `Projects/projectName__projectType.md`, never deletes
@@ -39,15 +40,14 @@ Then read this file fully before doing anything else in this session.
 - `setup.sh` (host): skill symlink and cron line. `INSTALL.md` documents the Docker route plus a short no-Docker route
 
 **Not yet built:**
-- Phase 5 (`phase5-plan.md`): hardening against OWASP Top 10:2025 and the API Security Top 10; designed 2026-10-01 (18 locked decisions, 6 steps). Steps 1–2 built 2026-10-02 (Go 1.27.1/Alpine 3.24.2; `web/edge.go`: `SPARK_URL`, host check, `SPARK_ALLOW_NETWORK`, `SPARK_TRUSTED_PROXIES`, CSP/HSTS, bundled fonts). Step 3: login penalties and lockouts (`web/lockout.go`, `web unlock`), 15-character passwords, login form token, `security:` log lines. Step 4: server-side sessions (`web/sessions.go`, `Config/sessions.json`, 24h idle), real logout, Log out everywhere, change password; gorilla/sessions dropped. Step 5: API per-IP penalties, 120 calls/min per account, 128 KB files, 50 projects per account, limits in `/api/types` with local pacing, `http://` remotes private-only, key last use. Step 6 (tests and docs) not built. It covers the parse-limit leftover (file and project caps)
-- Phase 3 leftovers (`phase4-plan.md`): CI (deferred past phase 5), unit tests
+- Phase 3 leftovers (`phase4-plan.md`): CI (next; deferred past phase 5). Parse limits are done (phase 5: 128 KB files, 50 projects per account)
 - Publishing the image to Docker Hub: a later phase, not soon. Until then, build it locally (`docker build -t spark .`); docs use the name `spark`
-- CI, and unit tests beyond `web/render_test.go` (end-to-end tests exist: `web/e2e/run.sh`, on demand only)
+- CI. Unit tests: `web/*_test.go` (render, edge, lockout and login, sessions, API); end-to-end tests: `web/e2e/run.sh`, on demand only
 - Code-graph coverage: `.mex/graph.db` indexed 0 files at setup (Go), so the scaffold has no `grounds_to` entries
 
 **Known issues:**
 - No automatic deletion (by design): renaming a project or changing its type leaves the old card until its file is deleted by hand
-- Without login, anyone who can reach the port can change settings; keep it on `127.0.0.1` unless login is on
+- Without login, anyone who can reach the port can change settings; a local answers only to localhost names unless `SPARK_ALLOW_NETWORK` (which warns when login is off)
 - Web rereads and reparses the whole data dir on every request (fine at current scale)
 
 ## Routing Table

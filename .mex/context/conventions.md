@@ -18,7 +18,7 @@ edges:
 # Add only nodes that embody the documented convention; do not ground examples broadly.
 # Graph indexed 0 files at setup (Go not indexed), so no grounding is possible yet.
 grounds_to: []
-last_updated: 2026-10-01
+last_updated: 2026-10-02
 mex:
   id: mx_01M3QT58YT4Y543HS1636EZP7P
   type: convention
@@ -106,6 +106,8 @@ Before presenting any code:
 - [ ] Mode-specific behavior goes through the `mode` interface, not a mode check in shared code
 - [ ] `go test ./...` passes in `web/`
 - [ ] Untrusted snapshot text still goes through goldmark or `html/template` escaping; no `template.HTML` built from raw input; anything written into `/colors.css` matches `typeNameRe`/`colorRe`
-- [ ] New routes are wrapped in `s.auth.require(...)` unless deliberately public (login, static, colors.css, `/invite/{token}`); API routes use `requireKey`; form POSTs call `checkPost` (CSRF), settings ones through `updateSettings`
+- [ ] New routes are wrapped in `s.auth.require(...)` unless deliberately public (login, static, colors.css, `/invite/{token}`); API routes use `requireKey` (per-IP penalties, per-account rate); form POSTs call `checkPost` (CSRF), settings ones through `updateSettings`; the login form uses `checkLoginToken`
+- [ ] A new limit has a safe default, an override (env setting or Settings page), and a startup warning when loosened (`warnLoosened`, or the mode's constructor); security-relevant events log through `securityEvent`
+- [ ] Anything that checks a password goes through `lockouts.begin`/`end` and `auth.slots`
 - [ ] Anything that runs on the host stays inside SparkRoot except `setup.sh`'s symlink and cron line
 - [ ] American English in code, comments, and docs
