@@ -1,0 +1,5 @@
+.git
+**/collector/collector
+**/web/web
+spark-data
+.e2e

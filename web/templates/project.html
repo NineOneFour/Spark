@@ -1,0 +1,55 @@
+{{define "content"}}
+{{with .Project}}
+<header class="band p-{{.Priority}} t-{{.Type}}">
+  <div class="band-inner">
+    <a class="back" href="/">All projects</a>
+    <span class="type-mark" aria-hidden="true"></span>
+    <span class="sr">Priority {{.Priority}}, {{.Type}}.</span>
+    <h1 class="band-name">{{.Name}}</h1>
+    <p class="band-desc">{{.Description}}</p>
+    <p class="band-meta">
+      Snapshot from <time datetime="{{.Updated.Format "2006-01-02T15:04:05Z07:00"}}">{{date .Updated}}</time>{{if .Owner}} by {{.Owner}}{{end}}
+    </p>
+    {{if $.CanEdit}}
+    <form method="post" action="/p/{{.Key}}/state" class="state">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      <input type="hidden" name="file" value="{{.ID}}">
+      <label for="priority">Priority</label>
+      <select id="priority" name="priority">
+        {{$current := .Priority}}
+        {{range $.Priorities}}<option value="{{.}}"{{if eq . $current}} selected{{end}}>{{.}} · {{priorityName .}}</option>{{end}}
+      </select>
+      <button name="action" value="priority">Save</button>
+      <button name="action" value="archive" class="quiet">Archive</button>
+    </form>
+    {{end}}
+  </div>
+</header>
+{{if $.Tabs}}
+<nav class="tabs" aria-label="Whose file">
+  {{range $.Card.Files}}
+  <a href="/p/{{.Key}}?u={{.Owner}}" class="tab p-{{.Priority}}"{{if eq .ID $.Project.ID}} aria-current="page"{{end}}>{{.Owner}}</a>
+  {{end}}
+</nav>
+{{end}}
+<main class="doc">
+  {{range .Sections}}
+  <section>
+    <h2>{{.Title}}</h2>
+    {{if .Items}}
+    <ul class="items">
+      {{range .Items}}
+      <li>
+        <p class="item-title">{{.Title}}</p>
+        {{if .Description}}<p class="item-desc">{{.Description}}</p>{{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <div class="prose">{{.Body}}</div>
+    {{end}}
+  </section>
+  {{end}}
+</main>
+{{end}}
+{{end}}

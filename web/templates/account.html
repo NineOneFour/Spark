@@ -1,0 +1,71 @@
+{{define "content"}}
+<header class="site">
+  <h1 class="wordmark">Spark</h1>
+  <nav class="nav-links">
+    <a class="nav" href="/settings">Settings</a>
+    <a class="nav" href="/">All projects</a>
+    {{if .Viewer}}<form method="post" action="/logout" class="nav-form"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="nav">Log out</button></form>{{end}}
+  </nav>
+</header>
+<main class="settings">
+  <h2 class="settings-title">{{.Account.Username}}</h2>
+  {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+
+  <section>
+    <h3>API keys</h3>
+    <p class="hint">Make one key for each machine that runs Spark, and paste it into that machine's Settings, under Remotes. Every key pushes as {{.Account.Username}}.</p>
+    {{if .NewKey}}
+    <p class="notice" role="status">Key for <strong>{{.NewKeyName}}</strong>. Copy it now; it won't be shown again:<br><code class="secret">{{.NewKey}}</code></p>
+    {{end}}
+    {{if .Account.Keys}}
+    <ul class="rows">
+      {{range .Account.Keys}}
+      <li>
+        <form method="post" action="/account/keys" class="row">
+          <input type="hidden" name="csrf" value="{{$.CSRF}}">
+          <input type="hidden" name="name" value="{{.Name}}">
+          <span class="row-name">{{.Name}} <span class="hint-inline">made {{date .Created}}, {{with .LastUsed}}last used {{date .}}{{else}}never used{{end}}{{if .Unused}} · unused for 90 days: revoke it if that machine is gone{{end}}</span></span>
+          <button name="action" value="revoke" class="quiet">Revoke</button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="hint">No keys yet.</p>
+    {{end}}
+    <form method="post" action="/account/keys" class="row add">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <label class="sr" for="key-name">Machine name</label>
+      <input id="key-name" name="name" placeholder="laptop" required maxlength="40">
+      <button name="action" value="create">Create key</button>
+    </form>
+  </section>
+
+  {{if .CanChangePassword}}
+  <section>
+    <h3>Password</h3>
+    {{if .Notice}}<p class="notice" role="status">{{.Notice}}</p>{{end}}
+    <form method="post" action="/account/password" class="stack">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="hidden" name="username" value="{{.Account.Username}}" autocomplete="username">
+      <label for="current">Current password</label>
+      <input id="current" name="current" type="password" autocomplete="current-password" required>
+      <label for="new-password">New password</label>
+      <input id="new-password" name="password" type="password" autocomplete="new-password" minlength="{{.MinPassword}}" maxlength="72" required>
+      <label for="confirm">New password again</label>
+      <input id="confirm" name="confirm" type="password" autocomplete="new-password" minlength="{{.MinPassword}}" maxlength="72" required>
+      <button>Change password</button>
+    </form>
+  </section>
+  {{end}}
+
+  <section>
+    <h3>Sessions</h3>
+    <p class="hint">Log out of Spark on every browser, this one included.</p>
+    <form method="post" action="/account/logout-all" class="row">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <button>Log out everywhere</button>
+    </form>
+  </section>
+</main>
+{{end}}

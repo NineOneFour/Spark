@@ -1,0 +1,34 @@
+{{define "content"}}
+<header class="site">
+  <h1 class="wordmark">Spark</h1>
+  <nav class="nav-links">
+    {{if .Remote}}<a class="nav" href="/account">Account</a>{{end}}
+    <a class="nav" href="/settings">Settings</a>
+    {{if .Viewer}}<form method="post" action="/logout" class="nav-form"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="nav">Log out</button></form>{{end}}
+  </nav>
+</header>
+<main class="shelf">
+  {{if .Cards}}
+  <ul class="grid">
+    {{range .Cards}}
+    <li>
+      <a class="card p-{{.Priority}} t-{{.Type}}" href="/p/{{.Key}}">
+        <span class="type-mark" aria-hidden="true"></span>
+        <span class="sr">Priority {{.Priority}}, {{.Type}}.</span>
+        <span class="card-name">{{.Name}}</span>
+        <span class="card-desc">{{.Description}}</span>
+        <span class="card-foot">
+          <time datetime="{{.Updated.Format "2006-01-02T15:04:05Z07:00"}}">{{date .Updated}}</time>
+        </span>
+      </a>
+    </li>
+    {{end}}
+  </ul>
+  {{else}}
+  <div class="empty">
+    <p class="empty-lead">No projects yet.</p>
+    <p>Run the Spark skill in a project and the collector will bring its snapshot here.</p>
+  </div>
+  {{end}}
+</main>
+{{end}}

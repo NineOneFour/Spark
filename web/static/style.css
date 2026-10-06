@@ -1,0 +1,601 @@
+/* Fonts are bundled (static/fonts, both SIL OFL; licenses alongside), so
+   pages load nothing from other sites and the CSP stays self-only. */
+/* latin-ext */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/static/fonts/atkinson-hyperlegible-latin-ext-400-italic.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/static/fonts/atkinson-hyperlegible-latin-400-italic.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/static/fonts/atkinson-hyperlegible-latin-ext-400-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(/static/fonts/atkinson-hyperlegible-latin-400-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(/static/fonts/atkinson-hyperlegible-latin-ext-700-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url(/static/fonts/atkinson-hyperlegible-latin-700-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* latin-ext */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 500 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(/static/fonts/bricolage-grotesque-latin-ext-500-800-normal.woff2) format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* latin */
+@font-face {
+  font-family: 'Bricolage Grotesque';
+  font-style: normal;
+  font-weight: 500 800;
+  font-stretch: 100%;
+  font-display: swap;
+  src: url(/static/fonts/bricolage-grotesque-latin-500-800-normal.woff2) format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Priority and type colors are per deployment: /colors.css sets --pc and
+   --tc on the .p-<priority> and .t-<type> classes, from SparkRoot/Config. */
+:root {
+  /* fixed UI colors (login button, error box) */
+  --accent: #2563eb;
+  --danger: #dc2626;
+
+  /* light theme base */
+  --bg: #eceff3;
+  --surface: #ffffff;
+  --text: #1c2029;
+  --muted: #555c69;
+  --rule: #d3d8e0;
+  --tint: 16%;   /* how much priority color goes into a card */
+  --band-tint: 22%;
+
+  --display: "Bricolage Grotesque", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171a21;
+    --surface: #20242d;
+    --text: #eceae6;
+    --muted: #a4a8b1;
+    --rule: #333844;
+    --tint: 30%;
+    --band-tint: 40%;
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 1.0625rem/1.55 var(--body);
+}
+
+a { color: inherit; }
+
+:focus-visible {
+  outline: 3px solid var(--text);
+  outline-offset: 3px;
+}
+
+.sr {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* A remote that accepts every type shows unlisted ones in a neutral accent;
+   /colors.css loads later, so its .t-<type> rules win. */
+.card, .band { --tc: var(--muted); }
+
+.type-mark {
+  display: block;
+  width: 2rem;
+  height: 0.375rem;
+  border-radius: 1rem;
+  background: var(--tc);
+}
+
+.wordmark {
+  margin: 0;
+  font: 800 1.75rem/1 var(--display);
+  letter-spacing: -0.02em;
+}
+
+/* Landing page */
+
+.site,
+.shelf {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding-inline: 1rem;
+}
+
+.site {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-block: 1.75rem 1.25rem;
+}
+
+.nav {
+  color: var(--muted);
+  font-size: 0.9375rem;
+  text-underline-offset: 0.2em;
+}
+
+.nav:hover { color: var(--text); }
+
+.nav-links { display: flex; align-items: baseline; gap: 1.25rem; }
+
+.nav-form { margin: 0; }
+
+button.nav {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.9375rem;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.shelf { padding-bottom: 3rem; }
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 0.875rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grid li { display: flex; }
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 1.125rem 1.125rem 1rem;
+  border-radius: 0.875rem;
+  background: color-mix(in oklab, var(--pc) var(--tint), var(--surface));
+  border-left: 0.375rem solid var(--pc);
+  text-decoration: none;
+}
+
+.card:hover { background: color-mix(in oklab, var(--pc) calc(var(--tint) + 8%), var(--surface)); }
+
+.card .type-mark { margin-bottom: 0.25rem; }
+
+.card-name {
+  font: 700 1.5rem/1.15 var(--display);
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+
+.card-desc {
+  color: var(--muted);
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.empty {
+  max-width: 34rem;
+  padding: 3rem 0;
+  color: var(--muted);
+}
+
+.empty-lead {
+  margin: 0 0 0.5rem;
+  color: var(--text);
+  font: 700 1.5rem/1.2 var(--display);
+}
+
+/* Project page */
+
+.band {
+  background: color-mix(in oklab, var(--pc) var(--band-tint), var(--bg));
+  border-bottom: 0.375rem solid var(--pc);
+}
+
+.band-inner,
+.doc {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding-inline: 1rem;
+}
+
+.band-inner { padding-block: 1.25rem 2.25rem; }
+
+.back {
+  display: inline-block;
+  margin-bottom: 2rem;
+  color: var(--muted);
+  font-size: 0.9375rem;
+  text-underline-offset: 0.2em;
+}
+
+.back:hover { color: var(--text); }
+
+.band-name {
+  margin: 0.75rem 0 0.75rem;
+  font: 800 clamp(2.25rem, 8vw, 3.75rem)/1 var(--display);
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.band-desc {
+  margin: 0;
+  max-width: 36em;
+  font-size: 1.1875rem;
+  line-height: 1.45;
+}
+
+.band-meta {
+  margin: 1.25rem 0 0;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+/* Priority and archive controls, on the band */
+.state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+  font-size: 0.9375rem;
+}
+
+.state label { font-weight: 700; }
+
+.state select,
+.state button {
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.state button.quiet { background: transparent; color: var(--muted); }
+
+.state button.quiet:hover { color: var(--danger); border-color: var(--danger); }
+
+/* One tab per person on a shared card */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  max-width: 44rem;
+  margin: 1rem auto 0;
+  padding-inline: 1rem;
+}
+
+.tab {
+  padding: 0.375rem 0.875rem;
+  border-radius: 2rem;
+  border: 1px solid var(--rule);
+  border-left: 0.25rem solid var(--pc);
+  color: var(--muted);
+  font-size: 0.9375rem;
+  text-decoration: none;
+}
+
+.tab:hover { color: var(--text); }
+
+.tab[aria-current="page"] {
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.doc { padding-block: 1rem 4rem; }
+
+.doc section { margin-top: 2.5rem; }
+
+.doc h2 {
+  margin: 0 0 0.75rem;
+  font: 700 1.3125rem/1.2 var(--display);
+}
+
+.prose p { margin: 0 0 1em; max-width: 66ch; }
+
+.prose :last-child { margin-bottom: 0; }
+
+code {
+  padding: 0.1em 0.3em;
+  border-radius: 0.3em;
+  background: var(--surface);
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+}
+
+.items {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.items li {
+  padding: 0.875rem 0 0.875rem 1rem;
+  border-left: 2px solid var(--rule);
+}
+
+.items li + li { margin-top: 0.25rem; }
+
+.item-title {
+  margin: 0;
+  font-weight: 700;
+}
+
+.item-desc {
+  margin: 0.25rem 0 0;
+  max-width: 66ch;
+  color: var(--muted);
+}
+
+/* Settings */
+
+.settings {
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
+}
+
+.settings-title {
+  margin: 0.5rem 0 1.5rem;
+  font: 800 2.25rem/1 var(--display);
+  letter-spacing: -0.02em;
+}
+
+.settings section {
+  margin-bottom: 1rem;
+  padding: 1.25rem;
+  border-radius: 0.875rem;
+  background: var(--surface);
+}
+
+.settings h3 {
+  margin: 0 0 0.25rem;
+  font: 700 1.25rem/1.2 var(--display);
+}
+
+.hint {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.rows {
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.row.add { border-bottom: 0; }
+
+/* A form of labeled fields, one under another (change password). */
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.375rem;
+  max-width: 22rem;
+}
+
+.stack input { align-self: stretch; margin-bottom: 0.5rem; }
+
+.row-name {
+  flex: 1;
+  min-width: 8rem;
+  overflow-wrap: anywhere;
+}
+
+.settings input:not([type]),
+.settings input[type="text"],
+.settings input[type="url"],
+.settings input[type="password"],
+.settings input[type="number"] {
+  flex: 1;
+  min-width: 10rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.5rem;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem; /* 16px keeps iOS from zooming in */
+}
+
+.settings input[type="color"] {
+  width: 2.5rem;
+  height: 2rem;
+  padding: 0.125rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.375rem;
+  background: var(--bg);
+  cursor: pointer;
+}
+
+.settings button {
+  padding: 0.5rem 0.875rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: #fff;
+  font: 700 0.9375rem var(--body);
+  cursor: pointer;
+}
+
+.settings button.quiet {
+  border: 1px solid var(--rule);
+  background: transparent;
+  color: var(--muted);
+}
+
+.settings button.quiet:hover { color: var(--danger); border-color: var(--danger); }
+
+.remote {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.remote .row-name { margin: 0 0 0.5rem; }
+
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 1rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  border: 0;
+}
+
+.hint-inline {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.notice {
+  margin: 0 0 1rem;
+  padding: 0.75rem 0.875rem;
+  border-left: 0.25rem solid var(--accent);
+  border-radius: 0.375rem;
+  background: color-mix(in oklab, var(--accent) 14%, var(--surface));
+}
+
+.secret {
+  display: inline-block;
+  margin-top: 0.375rem;
+  user-select: all;
+}
+
+/* Login */
+
+.login {
+  max-width: 22rem;
+  margin: 0 auto;
+  padding: 18vh 1rem 3rem;
+}
+
+.login .wordmark { margin-bottom: 1.75rem; font-size: 2.5rem; }
+
+.login form {
+  display: flex;
+  flex-direction: column;
+}
+
+.login label {
+  margin: 0 0 0.375rem;
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.login input {
+  margin-bottom: 1.125rem;
+  padding: 0.75rem 0.875rem;
+  border: 1px solid var(--rule);
+  border-radius: 0.625rem;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem; /* 16px keeps iOS from zooming in */
+}
+
+.login button {
+  margin-top: 0.5rem;
+  padding: 0.8125rem;
+  border: 0;
+  border-radius: 0.625rem;
+  background: var(--accent);
+  color: #fff;
+  font: 700 1rem var(--body);
+  cursor: pointer;
+}
+
+.error {
+  margin: 0 0 1.125rem;
+  padding: 0.75rem 0.875rem;
+  border-left: 0.25rem solid var(--danger);
+  border-radius: 0.375rem;
+  background: color-mix(in oklab, var(--danger) 18%, var(--surface));
+}

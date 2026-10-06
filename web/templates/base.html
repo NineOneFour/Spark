@@ -1,0 +1,14 @@
+{{define "base"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>{{.Title}}</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="stylesheet" href="/colors.css">
+</head>
+<body>
+{{template "content" .}}
+</body>
+</html>{{end}}

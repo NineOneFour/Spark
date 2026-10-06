@@ -1,0 +1,56 @@
+# Unit checks only. The end-to-end tests (web/e2e/run.sh) run on demand, not here.
+name: CI
+
+on:
+  # Branches only: a version tag runs these checks through release.yml.
+  push:
+    branches: ["**"]
+  pull_request:
+  # Weekly, so govulncheck sees new advisories even when the code hasn't changed.
+  schedule:
+    - cron: "0 6 * * 1"
+  # release.yml runs these checks before it publishes.
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # Actions are pinned by commit SHA because tags can be moved.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Matches the Dockerfile's golang:1.27.1-alpine3.24 build image.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "1.27.1"
+          cache-dependency-path: web/go.sum
+
+      - name: gofmt
+        working-directory: web
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "Not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        working-directory: web
+        run: go vet ./...
+
+      - name: go test
+        working-directory: web
+        run: go test ./...
+
+      - name: govulncheck
+        working-directory: web
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
+
+      - name: collector
+        run: python3 -m py_compile collector/collector.py

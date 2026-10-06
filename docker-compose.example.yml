@@ -1,0 +1,18 @@
+# Example: copy to docker-compose.yml, change the path, user and login, then
+# run `docker compose up -d`. Create the SparkRoot folder first.
+services:
+  spark:
+    image: nineonefour/spark     # or build: . from a checkout
+    user: "1000:1000"            # your `id -u`:`id -g`, so files stay yours
+    ports:
+      - "127.0.0.1:9140:9140"    # keep 127.0.0.1 unless login is on
+    environment: {}
+      # SPARK_MODE: remote       # for a team server; needs the login below
+      # SPARK_USERNAME: me       # set both to turn login on
+      # SPARK_PASSWORD: at-least-fifteen-characters
+      # SPARK_URL: https://spark.example.com  # remote: the address people open
+      # SPARK_TRUSTED_PROXIES: 172.17.0.1      # remote: your HTTPS proxy
+      # SPARK_ALLOW_NETWORK: "true"            # local: answer beyond localhost
+    volumes:
+      - ~/Documents/Spark:/spark # SparkRoot
+    restart: unless-stopped
