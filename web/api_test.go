@@ -91,7 +91,6 @@ const apiDemo = `---
 project: "Demo %d"
 description: A test project.
 last_updated: 2026-10-01T09:00:00-04:00
-priority: 3
 project_type: side-project
 ---
 

@@ -12,8 +12,8 @@ import (
 
 // stateFile holds each file's priority and archive flag. They live here, not
 // in the snapshot, because the collector rewrites every snapshot on each run
-// and would overwrite a priority set in the web app or on a remote. The
-// snapshot's own priority only seeds the entry the first time a file is seen.
+// and would overwrite a priority set in the web app or on a remote. A file
+// seen for the first time starts at newPriority.
 const stateFile = "state.json"
 
 // fileState is one entry in state.json, keyed by file id. On remote,
@@ -44,14 +44,14 @@ func (s *server) updateState(change func(st map[string]*fileState) (bool, error)
 	return writeJSON(path, st)
 }
 
-// seedState is a new file's state, from the snapshot's own priority. An
-// archived seed starts at priority 5, so unarchiving it later gives it one.
-func seedState(start string) *fileState {
-	e := &fileState{Priority: start, PrioritySet: time.Now().UTC()}
-	if start == "archived" {
-		e.Priority, e.Archived = "5", true
-	}
-	return e
+// newPriority is where every new project starts. Priority is set in the web
+// app, never in the snapshot; a priority line left in an old snapshot is
+// ignored.
+const newPriority = "3"
+
+// seedState is the state of a file seen for the first time.
+func seedState() *fileState {
+	return &fileState{Priority: newPriority, PrioritySet: time.Now().UTC()}
 }
 
 // applyState copies each file's state onto it, seeding state.json for files
@@ -63,7 +63,7 @@ func (s *server) applyState(projects []*Project) error {
 		for _, p := range projects {
 			e := st[p.ID]
 			if e == nil {
-				e = seedState(p.startPriority)
+				e = seedState()
 				st[p.ID] = e
 				changed = true
 			}

@@ -31,7 +31,6 @@ Required fields:
 project: Spark
 description: Lightweight project-memory dashboard for remembering where development projects were left.
 last_updated: 2026-09-29T14:32:00-04:00
-priority: 1
 project_type: side-project
 ---
 ```
@@ -78,26 +77,21 @@ Requirements:
 - Must not be derived from filesystem timestamps
 - Must not be derived from Git timestamps
 
-### `priority`
+### Priority (not in the file)
 
-Required controlled value. Always chosen by the user, never inferred: given in the invocation (`Spark, go 5`) or asked for.
+`spark.md` has no priority. Priority and archiving are set on the project's page in the web application and kept in `Config/state.json`, because the collector rewrites every snapshot on each run. A new project starts at `3`. A `priority` line left in an older snapshot is ignored.
 
-Supported values:
+The web application names each priority:
 
-| Value      | Name          | Meaning                                                          |
-|------------|---------------|------------------------------------------------------------------|
-| `1`        | Right now     | What I'm working on                                              |
-| `2`        | Up next       | Next in line                                                     |
-| `3`        | When I can    | Will pick up when there's room                                   |
-| `4`        | Eventually    | Not soon, but still intended                                     |
-| `5`        | Someday maybe | Whenever, if ever                                                |
-| `archived` | Shelved       | No work for the foreseeable future; starts archived (hidden)     |
+| Value | Name          | Meaning                          |
+|-------|---------------|----------------------------------|
+| `1`   | Right now     | What I'm working on              |
+| `2`   | Up next       | Next in line                     |
+| `3`   | When I can    | Will pick up when there's room   |
+| `4`   | Eventually    | Not soon, but still intended     |
+| `5`   | Someday maybe | Whenever, if ever                |
 
-The file stores the value. The name is only used when the skill asks the user; the web application shows priority as color.
-
-The value is only the starting priority. The first time the web application sees a file, it copies the priority into `Config/state.json`; from then on priority and archiving are changed in the web application, and a new snapshot's value is ignored. (The collector rewrites every snapshot on each run, so state kept in the file would be lost.) `archived` starts the project archived, at priority 5.
-
-`archived` also covers finished projects.
+Archiving, also for finished projects, hides the card.
 
 No other values are valid.
 
@@ -313,7 +307,6 @@ The YAML front matter is authoritative for:
 - project name
 - short description
 - snapshot timestamp
-- priority
 - project type
 
 ### Section Headings

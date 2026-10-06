@@ -273,7 +273,7 @@ func (m *remoteMode) apiPush(w http.ResponseWriter, r *http.Request) {
 		}
 		e := st[fileID]
 		if e == nil {
-			e = seedState(p.startPriority)
+			e = seedState()
 			st[fileID] = e
 		}
 		if req.Priority != nil {

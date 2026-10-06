@@ -72,7 +72,7 @@ python3 ~/Documents/Spark/collector.py
 
 In any project, tell your coding agent `Spark, go`. The skill writes `spark.md`, the collector copies it into `Projects/`, and the card appears.
 
-The priority you give the skill is only the starting value. After the card first appears, change priority, or archive the project, on its page. Archived projects are hidden; unarchive them under **Settings → Archived**.
+A new card starts at priority 3 (When I can). Change its priority, or archive the project, on its page. Archived projects are hidden; unarchive them under **Settings → Archived**.
 
 To pass a project to someone else, tell your coding agent `Spark, handoff`. It writes `handoff.md` next to `spark.md`: everything a new owner needs to take the project over. It asks first whether the previous owner is there to answer questions; if not, it drafts from the repo and marks what it could not confirm. The file stays in the repo; the dashboard doesn't show it.
 
@@ -126,7 +126,7 @@ All settings are files in `SparkRoot/Config/`, edited on the settings page or by
 | `scan_roots.json` | Folders the collector scans, for example `["~/Projects"]` |
 | `project_types.json` | Allowed project types, each with a card color, for example `[{"name": "side-project", "color": "#64748b"}]` |
 | `priority_colors.json` | Card color for each priority 1–5, for example `{"1": "#dc2626", ...}` |
-| `state.json` | Each project's priority and archive flag, set on the project page. Seeded from the snapshot the first time it's seen |
+| `state.json` | Each project's priority and archive flag, set on the project page. A new project starts at priority 3 |
 | `remotes.json` | Local only: remotes to push to, with their API keys |
 | `accounts.json` | Login accounts (bcrypt passwords, hashed API keys), and on remote, pending invites |
 | `remote.json` | Remote only: `{"accept_all_types": true}` to accept every project type; `max_projects_per_account` (default 50, `0` for no limit, also on the Settings page) caps each person's projects, archived ones included |

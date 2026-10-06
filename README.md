@@ -8,7 +8,7 @@ Spark is not a task manager or issue tracker. It's a nicer-looking way to read a
 
 ## How it works
 
-1. **Snapshot a project.** In any project, tell your coding agent `Spark, go`. It reads the project's docs and code, asks you for a priority (or say `Spark, go 2` to set it up front), and writes a fresh `spark.md` to the project root: what the project is, where you left it, and what's next. Run it before you step away, or when you come back.
+1. **Snapshot a project.** In any project, tell your coding agent `Spark, go`. It reads the project's docs and code and writes a fresh `spark.md` to the project root: what the project is, where you left it, and what's next. Run it before you step away, or when you come back.
 2. **The collector picks it up.** A small Python script, run by cron every 15 minutes, scans your project folders for `spark.md` files and copies them into one folder, SparkRoot.
 3. **Open the dashboard.** Every project is a card, color-coded by priority and type. Click one to read its snapshot, change its priority, or archive it. The settings page manages the folders to scan, project types, colors and remotes.
 4. **Hand it off.** To pass a project to someone else, tell your agent `Spark, handoff`. It writes `handoff.md` next to `spark.md`: everything a new owner needs to take the project over. It asks the previous owner what the repo doesn't say, or, without them, marks what it couldn't confirm.

@@ -25,7 +25,6 @@ const demo = `---
 project: "E2E Demo" # a comment the collector must drop
 description: A project the end-to-end tests push around.
 last_updated: 2026-10-01T09:00:00-04:00
-priority: 3
 project_type: side-project
 ---
 

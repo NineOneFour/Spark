@@ -18,10 +18,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// validPriority lists the priorities a snapshot may start with. From then on
-// the priority lives in state.json, where "archived" is a separate flag.
-var validPriority = map[string]bool{"1": true, "2": true, "3": true, "4": true, "5": true, "archived": true}
-
 // priorityNames are the names format.md gives each priority.
 var priorityNames = map[string]string{
 	"1": "Right now",
@@ -49,8 +45,6 @@ type Project struct {
 	Archived    bool   // from state.json
 	Type        string
 	Sections    []Section
-
-	startPriority string // front matter value, used only to seed state.json
 }
 
 type Section struct {
@@ -68,7 +62,6 @@ type frontMatter struct {
 	Project     string `yaml:"project"`
 	Description string `yaml:"description"`
 	LastUpdated string `yaml:"last_updated"`
-	Priority    string `yaml:"priority"`
 	ProjectType string `yaml:"project_type"`
 }
 
@@ -232,20 +225,16 @@ func parseSnapshot(raw []byte, validType func(string) bool) (*Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("last_updated %q is not an ISO 8601 timestamp with offset", meta.LastUpdated)
 	}
-	if !validPriority[meta.Priority] {
-		return nil, fmt.Errorf("unsupported priority %q", meta.Priority)
-	}
 	if !validType(meta.ProjectType) {
 		return nil, fmt.Errorf("unsupported project_type %q", meta.ProjectType)
 	}
 
 	return &Project{
-		Name:          meta.Project,
-		Description:   meta.Description,
-		Updated:       updated,
-		Type:          meta.ProjectType,
-		Sections:      parseSections(body),
-		startPriority: meta.Priority,
+		Name:        meta.Project,
+		Description: meta.Description,
+		Updated:     updated,
+		Type:        meta.ProjectType,
+		Sections:    parseSections(body),
 	}, nil
 }
 

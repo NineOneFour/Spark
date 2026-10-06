@@ -25,15 +25,6 @@ The skill should support simple explicit invocation such as:
 Spark, go.
 ```
 
-The invocation may end with a priority, which sets `priority` without asking:
-
-```text
-Spark, go 5
-Spark, go archived
-```
-
-Accept `1`–`5`, `archived`, or a priority name from [format.md](format.md) (for example `Up next` or `Shelved`). If the value matches none of these, ask as usual.
-
 When invoked, the skill should inspect the current project and generate a fresh `spark.md`.
 
 The user should not normally need to explain the project's current state manually. The skill should make a reasonable effort to determine it from existing project context.
@@ -134,13 +125,13 @@ If a meaningful ambiguity cannot reasonably be resolved from the project, ask th
 
 Create `spark.md` in the project root.
 
-The file must follow [format.md](format.md) exactly, using [template.md](template.md) as the skeleton: front matter fields, controlled `priority` and `project_type` values, section order, item structure, and length guidance all live there. Do not restate or reinterpret them here.
+The file must follow [format.md](format.md) exactly, using [template.md](template.md) as the skeleton: front matter fields, the controlled `project_type` values, section order, item structure, and length guidance all live there. Do not restate or reinterpret them here.
 
 Skill-specific rules on top of the format:
 
 - Write for someone returning after several months who needs to remember: *what is this, where did I leave it, and what do I need to think about next?*
 - Several related implementation tasks should collapse into one high-level Remaining Work item.
-- Always ask the user for `priority`, unless the invocation already gave one (see [Invocation](#invocation)). It is their call, not something the project can tell you. Ask in a plain-text message listing all six options by name (Right now, Up next, When I can, Eventually, Someday maybe, Shelved) and let them reply. Write the matching value from [format.md](format.md) (`1`–`5` or `archived`). Do not use a multiple-choice question tool: it caps options at four and drops some.
+- Do not ask for or write a priority. The user sets it in the web application.
 - Read the allowed `project_type` names from `Config/project_types.json` in SparkRoot first. This skill folder is usually a symlink to `SparkRoot/Skill`, so resolve its real path (for example `realpath ~/.claude/skills/spark`) and read `../Config/project_types.json` from there. Infer one when the context makes it reasonably clear. If not, ask the user. Never invent a new value.
 
 ## Snapshot Date
