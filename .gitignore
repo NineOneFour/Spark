@@ -3,3 +3,4 @@ docker-compose.yml
 projects/
 __pycache__/
 .e2e/
+test-deploy.sh
