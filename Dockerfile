@@ -3,7 +3,7 @@
 # See INSTALL.md for run flags.
 # The build stage runs on the builder's own platform and cross-compiles, so a
 # multi-platform build doesn't emulate the Go compiler.
-FROM --platform=$BUILDPLATFORM golang:1.27.1-alpine3.24 AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.2-alpine3.24 AS build
 ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY web/ web/
