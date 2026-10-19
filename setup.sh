@@ -15,7 +15,9 @@
 #      ~/.claude/skills/spark-handoff to SparkRoot/HandoffSkill
 #   4. asks which folder holds your projects, when no scan root is set yet
 #   5. adds a cron line that runs the collector every 15 minutes, and runs it
-#      once now so the cards are there straight away
+#      once now so the cards are there straight away; and, when claude is
+#      installed, one that runs autospark.py nightly: the skill in every
+#      project with commits newer than its spark.md
 #
 # Rerun it to upgrade: it pulls the latest image. Options come
 # from the existing container, so a plain rerun keeps them and flags change
@@ -73,6 +75,27 @@ link_skill() { # link_skill <name> <SparkRoot folder>
   else
     echo "skill: $link exists and is not a link; left it alone. Move it away and rerun to link it."
   fi
+}
+
+# A Spark line for another SparkRoot or binary is replaced, not added to.
+schedule() { # schedule <name> <when> <cron line> <pattern for an old line>
+  if ! command -v crontab >/dev/null 2>&1; then
+    echo "cron: crontab not found. Schedule this yourself:"
+    echo "  $3"
+    return
+  fi
+  current=$(crontab -l 2>/dev/null || true)
+  if printf '%s\n' "$current" | grep -qxF "$3"; then
+    echo "cron: $1 already scheduled"
+    return
+  fi
+  old=$(printf '%s\n' "$current" | grep -e "$4" || true)
+  { if [ -n "$current" ]; then printf '%s\n' "$current" | grep -v -e "$4" || true; fi; echo "$3"; } | crontab -
+  if [ -n "$old" ]; then
+    echo "cron: replaced the old $1 line:"
+    echo "  $old"
+  fi
+  echo "cron: $1 runs $2, log in $root/$1.log"
 }
 
 # Asks for the folder that holds your projects and writes it as the one scan
@@ -139,27 +162,23 @@ host_steps() {
     ask_scan_root
   fi
 
-  # 5. Cron line. collector.log holds the last run's output only.
+  # 5. Cron lines. collector.log and autospark.log hold the last run's output only.
   # Quoted, so a SparkRoot path with spaces still works. cron runs this with sh.
-  # A Spark line for another SparkRoot or python3 is replaced, not added to.
-  CRON_LINE="*/15 * * * * '$PYTHON' '$root/collector.py' > '$root/collector.log' 2>&1"
-  SPARK_LINE="/collector\.py' > '.*/collector\.log' 2>&1\$"
-  if ! command -v crontab >/dev/null 2>&1; then
-    echo "cron: crontab not found. Schedule this yourself:"
-    echo "  $CRON_LINE"
+  schedule collector "every 15 minutes" \
+    "*/15 * * * * '$PYTHON' '$root/collector.py' > '$root/collector.log' 2>&1" \
+    "/collector\.py' > '.*/collector\.log' 2>&1\$"
+
+  # The skill in every project with commits newer than its spark.md, nightly.
+  # claude's full path, since cron's PATH rarely has it.
+  CLAUDE=$(command -v claude || true)
+  if [ -z "$CLAUDE" ]; then
+    echo "cron: claude not found, so autospark is not scheduled; install Claude Code and rerun"
+  elif [ ! -f "$root/autospark.py" ]; then
+    echo "cron: $root has no autospark.py, so autospark is not scheduled"
   else
-    current=$(crontab -l 2>/dev/null || true)
-    if printf '%s\n' "$current" | grep -qxF "$CRON_LINE"; then
-      echo "cron: already scheduled"
-    else
-      old=$(printf '%s\n' "$current" | grep -e "$SPARK_LINE" || true)
-      { if [ -n "$current" ]; then printf '%s\n' "$current" | grep -v -e "$SPARK_LINE" || true; fi; echo "$CRON_LINE"; } | crontab -
-      if [ -n "$old" ]; then
-        echo "cron: replaced the old collector line:"
-        echo "  $old"
-      fi
-      echo "cron: collector runs every 15 minutes, log in $root/collector.log"
-    fi
+    schedule autospark "nightly at 03:00" \
+      "0 3 * * * '$PYTHON' '$root/autospark.py' '$CLAUDE' > '$root/autospark.log' 2>&1" \
+      "/autospark\.py' '.*' > '.*/autospark\.log' 2>&1\$"
   fi
 
   # The first run, so the cards don't wait for cron.

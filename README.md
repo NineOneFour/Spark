@@ -37,6 +37,7 @@ It creates `~/Documents/Spark`, starts the `nineonefour/spark` container on http
 skill/           the Spark skill ("Spark, go"), with the spark.md format and template
 handoff-skill/   the Spark Handoff skill ("Spark, handoff"), with the handoff.md format and template
 collector/       collector.py: finds spark.md files and copies them into SparkRoot
+                 autospark.py: runs the skill nightly where spark.md is older than the code
 web/             the dashboard, settings page and team sync API (Go)
 web/e2e/         end-to-end tests
 docker/          container entrypoint

@@ -4,6 +4,7 @@ Spark has three pieces:
 
 - **The skill** writes `spark.md` in a project when you say `Spark, go`. A second skill, Spark Handoff, writes `handoff.md` when you say `Spark, handoff`.
 - **The collector** (`collector.py`) finds `spark.md` files in your scan roots and copies them into SparkRoot.
+- **Autospark** (`autospark.py`) runs the skill each night in every project with commits newer than its `spark.md`.
 - **The web app** shows them as cards, and has a settings page.
 
 Everything ships in one Docker image. The container owns one host folder, **SparkRoot** (for example `~/Documents/Spark`), and fills it on start:
@@ -11,6 +12,7 @@ Everything ships in one Docker image. The container owns one host folder, **Spar
 ```text
 SparkRoot/
   collector.py   the collector; run on the host by cron
+  autospark.py   runs the skill where spark.md is stale; run on the host by cron
   setup.sh       setup and upgrade (a copy; the repo has the same script)
   INSTALL.md     this file
   Skill/         the Spark skill
@@ -34,6 +36,7 @@ Needs Docker and `python3`. From a checkout of this repo:
 3. Links `~/.claude/skills/spark` to `SparkRoot/Skill` and `~/.claude/skills/spark-handoff` to `SparkRoot/HandoffSkill`.
 4. Asks which folder holds your projects (default `~/Projects`, if you have one) and adds it as a scan root. It asks only while no scan root is set, so a rerun doesn't ask again.
 5. Adds a cron line that runs the collector every 15 minutes, and runs it once right away so your cards are there when you open the dashboard. The collector's last run is logged to `SparkRoot/collector.log`.
+6. If Claude Code (`claude`) is installed, adds a second cron line that runs autospark nightly at 03:00, logged to `SparkRoot/autospark.log`. See [Autospark](#autospark).
 
 Options:
 
@@ -75,6 +78,20 @@ In any project, tell your coding agent `Spark, go`. The skill writes `spark.md`,
 A new card starts at priority 3 (When I can). Change its priority, or archive the project, on its page. Archived projects are hidden; unarchive them under **Settings → Archived**.
 
 To pass a project to someone else, tell your coding agent `Spark, handoff`. It writes `handoff.md` next to `spark.md`: everything a new owner needs to take the project over. It asks first whether the previous owner is there to answer questions; if not, it drafts from the repo and marks what it could not confirm. The file stays in the repo; the dashboard doesn't show it.
+
+## Autospark
+
+Each night `autospark.py` checks every project under the scan roots: every folder with a `spark.md`, and every git repo (unless `Config/autospark.json` says `{"every_git_repo": false}`). A project is stale when its newest commit is newer than its snapshot's `last_updated`, or it has no `spark.md` yet. Commits that change only `spark.md` don't count, so committing a snapshot doesn't make it stale.
+
+In each stale project it runs `claude -p "Spark, go"`. Nobody is there to answer, so where the skill would ask, it guesses, such as the closest project type. Claude may read anything but runs only read-only commands and writes only `spark.md`. The collector copies the new snapshot on its next run. A repo that already has a `spark.md` in a subfolder doesn't get a new one at its top. Each run uses your Claude Code account.
+
+To run it now:
+
+```sh
+python3 ~/Documents/Spark/autospark.py
+```
+
+To turn it off, delete its line with `crontab -e`; rerunning `setup.sh` adds it back.
 
 ## Sharing with a team
 
@@ -127,6 +144,7 @@ All settings are files in `SparkRoot/Config/`, edited on the settings page or by
 | `project_types.json` | Allowed project types, each with a card color, for example `[{"name": "side-project", "color": "#64748b"}]` |
 | `priority_colors.json` | Card color for each priority 1–5, for example `{"1": "#dc2626", ...}` |
 | `state.json` | Each project's priority and archive flag, set on the project page. A new project starts at priority 3 |
+| `autospark.json` | By hand only: `{"every_git_repo": false}` makes autospark refresh only projects that already have a `spark.md`. The default, `true`, also gives every git repo under the scan roots its first one |
 | `remotes.json` | Local only: remotes to push to, with their API keys |
 | `accounts.json` | Login accounts (bcrypt passwords, hashed API keys), and on remote, pending invites |
 | `remote.json` | Remote only: `{"accept_all_types": true}` to accept every project type; `max_projects_per_account` (default 50, `0` for no limit, also on the Settings page) caps each person's projects, archived ones included |
@@ -179,7 +197,7 @@ git pull
 
 It recreates the container only when the image is newer or an option changed, and takes the folder, port, image and login from the old container, so a plain rerun keeps them. A container on a local build (`--image spark`) stays on it and isn't pulled; pass `--image nineonefour/spark` to move back. Options you added to a hand-made container with `docker run` are kept if they are `-e` settings; anything else (extra mounts, networks) is not. Recreating loses nothing: all of Spark's data is in SparkRoot.
 
-On every start the container overwrites `collector.py`, `setup.sh`, `INSTALL.md`, `Skill/` and `HandoffSkill/` with the image's copies, so don't edit those; customize through `Config/` instead. `Config/` and `Projects/` are never overwritten.
+On every start the container overwrites `collector.py`, `autospark.py`, `setup.sh`, `INSTALL.md`, `Skill/` and `HandoffSkill/` with the image's copies, so don't edit those; customize through `Config/` instead. `Config/` and `Projects/` are never overwritten.
 
 ## Removing a project
 
@@ -196,4 +214,4 @@ Build the web app (Go 1.27 or newer) and point it at SparkRoot:
 SPARK_ROOT=~/Documents/Spark ./web/web    # http://127.0.0.1:9140
 ```
 
-Then copy `collector/collector.py`, `setup.sh`, `skill/` (as `Skill/`) and `handoff-skill/` (as `HandoffSkill/`) into SparkRoot yourself, and run `SparkRoot/setup.sh --host-only` for the links, scan root and cron. Without `SPARK_ROOT`, the web app uses the folder its binary sits in. `web/web.env.example` lists the settings; pass the file with `-config`.
+Then copy `collector/collector.py`, `collector/autospark.py`, `setup.sh`, `skill/` (as `Skill/`) and `handoff-skill/` (as `HandoffSkill/`) into SparkRoot yourself, and run `SparkRoot/setup.sh --host-only` for the links, scan root and cron. Without `SPARK_ROOT`, the web app uses the folder its binary sits in. `web/web.env.example` lists the settings; pass the file with `-config`.

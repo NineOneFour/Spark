@@ -1,7 +1,7 @@
 #!/bin/sh
 # Fill SparkRoot from the image, then run the web app.
 #
-# collector.py, setup.sh, INSTALL.md, Skill/ and HandoffSkill/ are overwritten on every
+# collector.py, autospark.py, setup.sh, INSTALL.md, Skill/ and HandoffSkill/ are overwritten on every
 # start, so pulling a new image updates them. Config/ and Projects/ are never
 # touched here; the web app creates missing Config/ defaults itself.
 set -eu
@@ -25,6 +25,7 @@ put() {
 }
 
 put collector.py
+put autospark.py
 put setup.sh
 put INSTALL.md
 # Every file in Skill/ and HandoffSkill/, including any in subfolders.

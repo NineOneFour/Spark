@@ -53,4 +53,4 @@ jobs:
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.8.0 ./...
 
       - name: collector
-        run: python3 -m py_compile collector/collector.py
+        run: python3 -m py_compile collector/collector.py collector/autospark.py
