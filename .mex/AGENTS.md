@@ -13,7 +13,7 @@ A project-memory dashboard: an agent skill writes `spark.md` snapshots, a Go col
 - `skill/format.md` is the single contract for `spark.md`; change it, `skill/template.md`, and `web/projects.go` validation together
 - No database, no API: Markdown files in the data directory are the only source of truth
 - The web app only reads the data directory; it never writes, renames, or deletes snapshots
-- Collector writes must stay atomic (temp file + rename), and it must never prune on an empty scan
+- Collector writes must never leave a half-written file (temp file + rename; atomic for local, backup-and-rename for SMB), and it must never prune on an empty scan
 - Snapshot content is untrusted: keep goldmark's default HTML escaping and the CSP header
 
 ## Commands

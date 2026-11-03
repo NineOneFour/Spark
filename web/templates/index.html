@@ -16,6 +16,7 @@
           <time datetime="{{.Updated.Format "2006-01-02T15:04:05Z07:00"}}">{{date .Updated}}</time>
           {{if .ShowMachine}}<span class="machine">{{.Machine}}</span>{{end}}
         </span>
+        {{if .Stale}}<span class="stale">Last synced {{.Synced.Format "Jan 2, 15:04"}}, data may be stale</span>{{end}}
       </a>
     </li>
     {{end}}

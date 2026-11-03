@@ -57,7 +57,7 @@ Both binaries read settings from environment variables. They can also read an en
 | `SPARK_USERNAME`, `SPARK_PASSWORD` | unset | Set both to require login. Leave both unset for no login |
 | `SPARK_MERGE` | unset | Folder names to merge across machines, comma-separated. The newest snapshot wins |
 
-**Collector deletions:** the collector removes files with its own `MACHINE_ID` prefix that it did not find on this run, so deleted projects disappear. If a run finds nothing at all, it deletes nothing, since that usually means a wrong `SCAN_ROOT`.
+**Collector deletions:** the collector removes files with its own `MACHINE_ID` prefix that it did not find on this run, so deleted projects disappear. If a run finds nothing at all, or the scan was incomplete (a root or folder could not be read, or a `spark.md` sits directly in a scan root), it deletes nothing, and an incomplete scan makes the run fail (exit 1), since that usually means a wrong or unreadable `SCAN_ROOT`.
 
 **Login:** it is off unless you set a username and password. Turn it on for anything reachable from the Internet.
 
@@ -235,3 +235,16 @@ Run it once by hand to check:
 ~/.local/bin/spark-collector
 journalctl --user -u spark-collector   # later runs
 ```
+
+### Monitoring
+
+The collector's exit code is the failure signal: it exits 1 when a copy or prune fails or the scan is incomplete, and systemd marks the unit failed (it also stops a run that hangs after 120 seconds). Check it with:
+
+```sh
+systemctl --user status spark-collector
+journalctl --user -u spark-collector -n 50
+```
+
+In Docker, a failed run prints `collector failed with exit status N` in the container log (`docker logs`) and the loop keeps going.
+
+The web app also flags it. If a machine's newest snapshot is older than 45 minutes (three times the default 15-minute timer), its cards and project pages show "Last synced ..., data may be stale", and the web log prints a `machine <id> is stale` warning once.

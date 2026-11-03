@@ -10,6 +10,7 @@
     <p class="band-meta">
       Snapshot from <time datetime="{{.Updated.Format "2006-01-02T15:04:05Z07:00"}}">{{date .Updated}}</time>{{if .ShowMachine}}, on <span class="machine">{{.Machine}}</span>{{end}}
     </p>
+    {{if .Stale}}<p class="stale" role="status">Last synced {{.Synced.Format "Jan 2, 2006 15:04"}}, data may be stale</p>{{end}}
   </div>
 </header>
 <main class="doc">

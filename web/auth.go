@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -23,10 +24,17 @@ const (
 type auth struct {
 	username, password string
 	key                []byte
-	// Failed logins are serialized behind a one-second delay, which caps
-	// password guessing at about one attempt per second in total.
+	// failMu is the login limiter. An attempt must take it before comparing
+	// credentials; a failed attempt holds it for failDelay. Attempts that find
+	// it held are refused without being evaluated, so password guessing is
+	// capped at one evaluated failure per failDelay in total.
 	failMu sync.Mutex
+	// compares counts evaluated credential comparisons (used by tests).
+	compares atomic.Int64
 }
+
+// failDelay is how long a failed login holds the limiter.
+var failDelay = time.Second
 
 func newAuth(username, password string) *auth {
 	sum := sha256.Sum256([]byte("spark-session\x00" + username + "\x00" + password))
@@ -55,16 +63,23 @@ func (a *auth) valid(r *http.Request) bool {
 	return hmac.Equal([]byte(sig), []byte(a.sign(expiry)))
 }
 
-func (a *auth) checkCredentials(username, password string) bool {
+// checkCredentials reports whether the credentials are right. busy is true
+// when the limiter is held by another failed attempt; the credentials were
+// not evaluated and the caller should answer 429.
+func (a *auth) checkCredentials(username, password string) (ok, busy bool) {
+	if !a.failMu.TryLock() {
+		return false, true
+	}
+	a.compares.Add(1)
 	userOK := subtle.ConstantTimeCompare([]byte(username), []byte(a.username)) == 1
 	passOK := subtle.ConstantTimeCompare([]byte(password), []byte(a.password)) == 1
 	if userOK && passOK {
-		return true
+		a.failMu.Unlock()
+		return true, false
 	}
-	a.failMu.Lock()
-	time.Sleep(time.Second)
+	time.Sleep(failDelay)
 	a.failMu.Unlock()
-	return false
+	return false, false
 }
 
 // setSession marks the cookie Secure only over HTTPS (directly or via a proxy

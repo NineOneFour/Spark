@@ -79,7 +79,7 @@ revision: 1
 ## Key Components
 - **skill/** (`SKILL.md`, `format.md`, `template.md`) — agent instructions that generate `spark.md`; symlinked into `~/.claude/skills/spark`. `format.md` is also the web parser's spec.
 - **collector** (`collector/main.go`) — config loading (env file + env override), `scan`, `copyTo`, `prune`. Exits 1 if any copy or prune fails. Never prunes when a scan finds zero files.
-- **target interface** (`collector/target.go`) — `Put/List/Remove/Close`; `localTarget` (write temp, rename) and `smbTarget` (write temp, remove old, rename, because SMB rename won't overwrite). `Put` must never leave a half-written file.
+- **target interface** (`collector/target.go`) — `Put/List/Remove/Close`; `localTarget` (write temp, rename) and `smbTarget` (write temp, rename old to a `.old.tmp` backup, rename temp into place, remove backup; SMB rename won't overwrite, and there is no moment where neither version exists). `Put` must never leave a half-written file.
 - **web server** (`web/main.go`) — `net/http` mux with Go 1.22 patterns (`GET /{$}`, `GET /p/{id}`, `/login`), embedded templates/static, `securityHeaders` middleware (CSP, nosniff).
 - **project loader** (`web/projects.go`) — `loadProjects` → `parseFile` → `splitFrontMatter` + YAML + `parseSections`; drops invalid and `archived` files; applies `SPARK_MERGE`; sets `ShowMachine` when folder names collide.
 - **auth** (`web/auth.go`) — optional single-user login; stateless HMAC cookie `spark_session` keyed by username+password; `require` is a no-op when `auth` is nil.

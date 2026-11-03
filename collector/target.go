@@ -1,15 +1,20 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/hirochachacha/go-smb2"
 )
 
 // target is where snapshots are copied: an SMB share or a local folder.
-// Put must never leave a partially written file under name.
+// Put must never leave a partially written file under name. localTarget.Put
+// replaces atomically; smbTarget.Put cannot (SMB rename will not overwrite),
+// so it moves the old file aside first and never leaves a moment where neither
+// the old nor the new version exists.
 type target interface {
 	Put(name string, data []byte) error
 	List() ([]string, error) // file names, not directories
@@ -58,17 +63,33 @@ func (t localTarget) Remove(name string) error { return os.Remove(filepath.Join(
 
 func (t localTarget) Close() {}
 
+// Timeouts for the SMB connection. The run deadline covers every operation on
+// the connection, so a hung share cannot stall the collector forever.
+var (
+	smbDialTimeout = 10 * time.Second
+	smbRunTimeout  = 90 * time.Second
+)
+
+// smbFS is the part of *smb2.Share that Put needs.
+type smbFS interface {
+	WriteFile(name string, data []byte, perm os.FileMode) error
+	Rename(oldpath, newpath string) error
+	Remove(name string) error
+}
+
 type smbTarget struct {
+	fs      smbFS
 	share   *smb2.Share
 	session *smb2.Session
 	conn    net.Conn
 }
 
 func connectSMB(cfg config) (target, error) {
-	conn, err := net.Dial("tcp", cfg.SMBHost)
+	conn, err := (&net.Dialer{Timeout: smbDialTimeout}).Dial("tcp", cfg.SMBHost)
 	if err != nil {
 		return nil, err
 	}
+	conn.SetDeadline(time.Now().Add(smbRunTimeout))
 	d := &smb2.Dialer{Initiator: &smb2.NTLMInitiator{User: cfg.SMBUser, Password: cfg.SMBPassword}}
 	session, err := d.Dial(conn)
 	if err != nil {
@@ -81,24 +102,39 @@ func connectSMB(cfg config) (target, error) {
 		conn.Close()
 		return nil, err
 	}
-	return &smbTarget{share: share, session: session, conn: conn}, nil
+	return &smbTarget{fs: share, share: share, session: session, conn: conn}, nil
 }
 
-// Put writes a temp file and renames it into place. SMB rename will not
-// overwrite, so the old file is removed first; the file is briefly absent but
-// never half-written.
+// Put writes a temp file, moves the live file aside to a per-run backup,
+// renames the temp file into place, then removes the backup. If the final
+// rename fails, the backup is restored and the temp file is kept. The backup
+// name ends in ".tmp" and starts with "." + name, so prune's leftover cleanup
+// matches it if a run is interrupted.
 func (t *smbTarget) Put(name string, data []byte) error {
 	tmp := "." + name + ".tmp"
-	if err := t.share.WriteFile(tmp, data, 0o644); err != nil {
+	bak := "." + name + ".old.tmp"
+	if err := t.fs.WriteFile(tmp, data, 0o644); err != nil {
 		return err
 	}
-	if err := t.share.Remove(name); err != nil && !os.IsNotExist(err) {
-		t.share.Remove(tmp)
-		return err
+	t.fs.Remove(bak) // stale backup from an interrupted run
+	hadOld := true
+	if err := t.fs.Rename(name, bak); err != nil {
+		if !os.IsNotExist(err) {
+			t.fs.Remove(tmp)
+			return err
+		}
+		hadOld = false
 	}
-	if err := t.share.Rename(tmp, name); err != nil {
-		t.share.Remove(tmp)
-		return err
+	if err := t.fs.Rename(tmp, name); err != nil {
+		if hadOld {
+			if rerr := t.fs.Rename(bak, name); rerr != nil {
+				return fmt.Errorf("%w (restoring the previous version failed: %v; it is at %s, new data at %s)", err, rerr, bak, tmp)
+			}
+		}
+		return fmt.Errorf("%w (new data kept at %s)", err, tmp)
+	}
+	if hadOld {
+		t.fs.Remove(bak)
 	}
 	return nil
 }

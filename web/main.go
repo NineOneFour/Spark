@@ -32,6 +32,9 @@ type config struct {
 	Merge    map[string]bool
 }
 
+// maxLoginBody caps the login form body; two short fields fit in a few KB.
+const maxLoginBody = 4 << 10
+
 type server struct {
 	cfg  config
 	auth *auth
@@ -71,7 +74,13 @@ func main() {
 	mux.HandleFunc("GET /p/{id}", s.auth.require(s.project))
 
 	log.Printf("listening on %s, reading %s", cfg.Addr, cfg.DataDir)
-	log.Fatal(http.ListenAndServe(cfg.Addr, securityHeaders(mux)))
+	srv := &http.Server{
+		Addr:              cfg.Addr,
+		Handler:           securityHeaders(mux),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+	}
+	log.Fatal(srv.ListenAndServe())
 }
 
 func (s *server) render(w http.ResponseWriter, page string, data any) {
@@ -121,8 +130,24 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
 		return
 	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxLoginBody)
+	if err := r.ParseForm(); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			http.Error(w, "Request too large.", http.StatusRequestEntityTooLarge)
+		} else {
+			http.Error(w, "Bad request.", http.StatusBadRequest)
+		}
+		return
+	}
 	username, password := r.PostFormValue("username"), r.PostFormValue("password")
-	if !s.auth.checkCredentials(username, password) {
+	ok, busy := s.auth.checkCredentials(username, password)
+	if busy {
+		w.Header().Set("Retry-After", "1")
+		http.Error(w, "Too many login attempts. Wait a moment and try again.", http.StatusTooManyRequests)
+		return
+	}
+	if !ok {
 		w.WriteHeader(http.StatusUnauthorized)
 		s.render(w, "login", map[string]any{
 			"Title":    "Log in to Spark",

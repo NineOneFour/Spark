@@ -37,9 +37,17 @@ type Project struct {
 	Updated     time.Time
 	Priority    string
 	Type        string
-	ShowMachine bool // set when another card has the same folder name
+	ShowMachine bool      // set when another card has the same folder name
+	Synced      time.Time // newest snapshot file mtime for this machine
+	Stale       bool      // Synced is older than staleAfter
 	Sections    []Section
 }
+
+// staleAfter is 3 times the collector's default 15-minute timer.
+const staleAfter = 45 * time.Minute
+
+// now is replaced in tests.
+var now = time.Now
 
 type Section struct {
 	Title string
@@ -70,10 +78,16 @@ func loadProjects(dir string, merge map[string]bool) ([]*Project, error) {
 	}
 
 	var all []*Project
+	synced := map[string]time.Time{} // machine -> newest snapshot mtime
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || strings.HasPrefix(name, ".") || !strings.HasSuffix(name, ".md") {
 			continue
+		}
+		if machine, _, ok := strings.Cut(name, "__"); ok && machine != "" {
+			if info, err := e.Info(); err == nil && info.ModTime().After(synced[machine]) {
+				synced[machine] = info.ModTime()
+			}
 		}
 		p, err := parseFile(filepath.Join(dir, name))
 		reportInvalid(name, err)
@@ -103,6 +117,12 @@ func loadProjects(dir string, merge map[string]bool) ([]*Project, error) {
 		projects = append(projects, p)
 	}
 
+	reportStale(synced)
+	for _, p := range projects {
+		p.Synced = synced[p.Machine]
+		p.Stale = isStale(p.Synced)
+	}
+
 	count := map[string]int{}
 	for _, p := range projects {
 		count[strings.ToLower(p.Folder)]++
@@ -119,6 +139,33 @@ func loadProjects(dir string, merge map[string]bool) ([]*Project, error) {
 		return projects[i].Machine < projects[j].Machine
 	})
 	return projects, nil
+}
+
+func isStale(synced time.Time) bool {
+	return !synced.IsZero() && now().Sub(synced) > staleAfter
+}
+
+var (
+	staleMu    sync.Mutex
+	staleState = map[string]bool{} // machine -> last logged stale state
+)
+
+// reportStale logs when a machine goes stale or recovers, once per change.
+func reportStale(synced map[string]time.Time) {
+	staleMu.Lock()
+	defer staleMu.Unlock()
+	for machine, t := range synced {
+		stale := isStale(t)
+		if stale == staleState[machine] {
+			continue
+		}
+		staleState[machine] = stale
+		if stale {
+			log.Printf("machine %s is stale: last snapshot synced %s", machine, t.Format(time.RFC3339))
+		} else {
+			log.Printf("machine %s is syncing again", machine)
+		}
+	}
 }
 
 var (

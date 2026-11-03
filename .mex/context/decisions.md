@@ -68,7 +68,7 @@ revision: 1
 **Decision:** Collectors upload over SMB (or copy locally) into the data dir. The web app runs as a separate account with read-only access.
 **Reasoning:** `INSTALL.md`: "a compromised web app can't change snapshots". SMB stays LAN-only.
 **Alternatives considered:** Not recorded in the repo.
-**Consequences:** The web app must never gain a write path. Collector writes must be atomic because the reader can run at any moment.
+**Consequences:** The web app must never gain a write path. Collector writes must never expose a half-written file because the reader can run at any moment (atomic for local; backup-and-rename for SMB, so the old or new version always exists).
 
 <!-- mex:entity
 id: mx_01M3QT58Z8J61Q5W60M6CQFMGY
@@ -82,7 +82,7 @@ revision: 1
 **Decision:** The collector deletes this machine's stale files only when the current scan found at least one `spark.md`.
 **Reasoning:** Comment in `collector/main.go`: an empty scan more likely means a wrong or missing root than that every project is gone.
 **Alternatives considered:** Not recorded in the repo.
-**Consequences:** Removing your last project leaves its card until another project exists or the file is deleted by hand.
+**Consequences:** Removing your last project leaves its card until another project exists or the file is deleted by hand. The same rule covers incomplete scans (unreadable root or folder, or a `spark.md` directly in a scan root): no pruning, and the run exits 1.
 
 <!-- mex:entity
 id: mx_01M3QT58Z2FBVPF31HZSZV5A7K
@@ -94,6 +94,6 @@ revision: 1
 **Date:** 2026-09-29
 **Status:** Active
 **Decision:** Login is off unless both `SPARK_USERNAME` and `SPARK_PASSWORD` are set. Sessions are HMAC-signed expiry cookies keyed from the credentials.
-**Reasoning:** `web/auth.go`: no session store needed, and changing the password signs everyone out. Failed logins are serialized behind a 1-second delay to limit guessing.
+**Reasoning:** `web/auth.go`: no session store needed, and changing the password signs everyone out. The login limiter is global: one credential check is evaluated at a time, a failed check holds the limiter for 1 second, and attempts that arrive meanwhile get HTTP 429 without being evaluated. So guessing is capped at about one evaluated failure per second in total (a guesser can briefly lock the owner out; accepted).
 **Alternatives considered:** Not recorded in the repo.
 **Consequences:** No multi-user support. Sessions last 30 days and can't be revoked individually.

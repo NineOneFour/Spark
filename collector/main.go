@@ -59,9 +59,6 @@ func main() {
 		log.Fatalf("config: %v", err)
 	}
 
-	projects := scan(cfg.ScanRoots)
-	log.Printf("found %d spark.md file(s) under %s", len(projects), strings.Join(cfg.ScanRoots, ", "))
-
 	var dst target
 	if cfg.SMBHost != "" {
 		dst, err = connectSMB(cfg)
@@ -73,7 +70,17 @@ func main() {
 	}
 	defer dst.Close()
 
-	failed := false
+	if run(cfg, dst) {
+		dst.Close()
+		os.Exit(1)
+	}
+}
+
+// run scans, copies, and prunes. It reports whether anything failed.
+func run(cfg config, dst target) (failed bool) {
+	projects, complete := scan(cfg.ScanRoots)
+	log.Printf("found %d spark.md file(s) under %s", len(projects), strings.Join(cfg.ScanRoots, ", "))
+
 	keep := map[string]bool{}
 	for _, p := range projects {
 		name := cfg.MachineID + "__" + p.folder + ".md"
@@ -86,18 +93,22 @@ func main() {
 		log.Printf("copied %s -> %s", p.path, name)
 	}
 
-	// An empty scan more likely means a wrong or missing root than that every
-	// project is gone, so never wipe this machine's cards on an empty scan.
-	if len(projects) == 0 {
-		log.Printf("no spark.md files found; skipping deletion")
-	} else if err := prune(dst, cfg.MachineID, keep); err != nil {
-		log.Printf("prune: %v", err)
+	// An empty or incomplete scan more likely means a wrong, missing, or
+	// unreadable root than that every project is gone, so never wipe this
+	// machine's cards then. An incomplete scan also fails the run.
+	switch {
+	case !complete:
+		log.Printf("scan was incomplete; skipping deletion")
 		failed = true
+	case len(projects) == 0:
+		log.Printf("no spark.md files found; skipping deletion")
+	default:
+		if err := prune(dst, cfg.MachineID, keep); err != nil {
+			log.Printf("prune: %v", err)
+			failed = true
+		}
 	}
-
-	if failed {
-		os.Exit(1)
-	}
+	return failed
 }
 
 var configKeys = []string{"MACHINE_ID", "SCAN_ROOT", "TARGET_DIR", "SMB_HOST", "SMB_SHARE", "SMB_USER", "SMB_PASSWORD"}
@@ -202,17 +213,22 @@ type project struct {
 
 // scan walks each root and returns one project per folder containing
 // spark.md. It does not descend into a folder once it has found spark.md
-// there. A root that cannot be read is logged and skipped.
-func scan(roots []string) []project {
+// there. complete is false if anything could not be read (a root, a folder, or
+// a spark.md that failed to stat) or if a spark.md sits directly in a scan
+// root, which is a configuration error; callers must not prune then.
+func scan(roots []string) (projects []project, complete bool) {
+	complete = true
 	var found []project
 	for _, root := range roots {
 		if info, err := os.Stat(root); err != nil || !info.IsDir() {
 			log.Printf("scan %s: not a readable directory", root)
+			complete = false
 			continue
 		}
 		filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				log.Printf("scan %s: %v", path, err)
+				complete = false
 				if d != nil && d.IsDir() {
 					return fs.SkipDir
 				}
@@ -225,7 +241,18 @@ func scan(roots []string) []project {
 				return fs.SkipDir
 			}
 			candidate := filepath.Join(path, sparkFile)
-			if fi, err := os.Stat(candidate); err == nil && fi.Mode().IsRegular() {
+			fi, err := os.Stat(candidate)
+			if err != nil && !errors.Is(err, fs.ErrNotExist) {
+				log.Printf("scan %s: %v", candidate, err)
+				complete = false
+				return nil
+			}
+			if err == nil && fi.Mode().IsRegular() {
+				if path == root {
+					log.Printf("scan %s: %s sits directly in a scan root; point SCAN_ROOT at the folder that holds your project folders", root, sparkFile)
+					complete = false
+					return nil
+				}
 				found = append(found, project{path: candidate, folder: filepath.Base(path)})
 				return fs.SkipDir
 			}
@@ -247,7 +274,7 @@ func scan(roots []string) []project {
 		seen[key] = p.path
 		unique = append(unique, p)
 	}
-	return unique
+	return unique, complete
 }
 
 func copyTo(dst target, localPath, name string) error {
@@ -265,6 +292,7 @@ func prune(dst target, machineID string, keep map[string]bool) error {
 	if err != nil {
 		return err
 	}
+	var errs []error
 	prefix := strings.ToLower(machineID + "__")
 	for _, name := range names {
 		lower := strings.ToLower(name)
@@ -275,9 +303,10 @@ func prune(dst target, machineID string, keep map[string]bool) error {
 		}
 		if err := dst.Remove(name); err != nil {
 			log.Printf("delete %s: %v", name, err)
+			errs = append(errs, fmt.Errorf("delete %s: %w", name, err))
 			continue
 		}
 		log.Printf("deleted %s", name)
 	}
-	return nil
+	return errors.Join(errs...)
 }

@@ -7,7 +7,11 @@ set -e
 if [ "${COLLECT_INTERVAL}" != "0" ]; then
   (
     while true; do
-      collector || true
+      status=0
+      timeout 120 collector || status=$?
+      if [ "$status" -ne 0 ]; then
+        echo "collector failed with exit status $status at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      fi
       sleep "${COLLECT_INTERVAL}"
     done
   ) &

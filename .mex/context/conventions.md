@@ -98,6 +98,7 @@ Before presenting any code:
 - [ ] If the `spark.md` contract changed: `skill/format.md`, `skill/template.md`, `web/projects.go`, and CSS all agree
 - [ ] New settings are in `configKeys`, the matching `*.env.example`, the `INSTALL.md` table, and (if relevant) `Dockerfile` `ENV`
 - [ ] The web app still performs no writes to the data dir; collector writes still go through `target.Put`
+- CI (`.github/workflows/ci.yml`) runs `go vet ./...`, `gofmt -l .`, and `go test ./...` in both `collector/` and `web/` on every push to `main` and every pull request
 - [ ] Untrusted snapshot text still goes through goldmark or `html/template` escaping; no `template.HTML` built from raw input
 - [ ] New routes are wrapped in `s.auth.require(...)` unless they are deliberately public (login, static)
 - [ ] American English in code, comments, and docs
