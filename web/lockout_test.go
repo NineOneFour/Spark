@@ -211,6 +211,16 @@ func TestLoginFlow(t *testing.T) {
 	if got := post("correct-horse-battery", "forged"); got != http.StatusForbidden {
 		t.Errorf("wrong form token: %d", got)
 	}
+	// An oversized body is refused before the password is checked, so it
+	// doesn't count as a failure.
+	if got := post(strings.Repeat("x", maxLoginBody), token); got != http.StatusRequestEntityTooLarge {
+		t.Errorf("oversized body: %d", got)
+	}
+	if d, err := readLockouts(s.auth.lock.path); err != nil {
+		t.Fatal(err)
+	} else if e := d.Accounts["admin"]; e != nil {
+		t.Errorf("oversized body counted as a failure: %+v", e)
+	}
 	if got := post("wrong", token); got != http.StatusUnauthorized {
 		t.Errorf("wrong password: %d", got)
 	}

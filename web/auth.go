@@ -334,11 +334,26 @@ func (s *server) checkLoginToken(r *http.Request) bool {
 	return subtle.ConstantTimeCompare([]byte(r.PostFormValue("csrf")), []byte(want)) == 1
 }
 
+// maxLoginBody caps the login form body. Its three short fields fit in a
+// few hundred bytes; without a cap, anyone can post up to 10 MB before
+// logging in.
+const maxLoginBody = 4 << 10
+
 // login checks a password unless the account is waiting out a penalty or is
 // locked (lockout.go); refused attempts aren't checked or counted.
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	if s.auth == nil {
 		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxLoginBody)
+	if err := r.ParseForm(); err != nil {
+		var tooBig *http.MaxBytesError
+		if errors.As(err, &tooBig) {
+			http.Error(w, "Request too large.", http.StatusRequestEntityTooLarge)
+		} else {
+			http.Error(w, "Bad request.", http.StatusBadRequest)
+		}
 		return
 	}
 	username, password := r.PostFormValue("username"), r.PostFormValue("password")
